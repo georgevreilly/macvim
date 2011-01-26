@@ -233,4 +233,3 @@ gui_mch_register_sign(char_u *signfile);
 
     void
 gui_mch_destroy_sign(void *sign);
-
