@@ -7031,7 +7031,7 @@ buf_check_timestamp(buf, focus)
 		{
 		    switch (do_dialog(VIM_WARNING, (char_u *)_("Warning"), tbuf,
 					(char_u *)_("&OK\n&Load File\nLoad &All\n&Ignore All"),
-								    1, NULL))
+								1, NULL, TRUE))
 		    {
 			case 3:
 			    default_reload_choice = 2;
@@ -7045,7 +7045,7 @@ buf_check_timestamp(buf, focus)
 		}
 # else
 		if (do_dialog(VIM_WARNING, (char_u *)_("Warning"), tbuf,
-				(char_u *)_("&OK\n&Load File"), 1, NULL) == 2)
+			  (char_u *)_("&OK\n&Load File"), 1, NULL, TRUE) == 2)
 		    reload = TRUE;
 # endif
 	    }
