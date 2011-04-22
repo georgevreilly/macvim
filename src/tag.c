@@ -204,7 +204,7 @@ do_tag(tag, type, count, forceit, verbose)
     else
     {
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	if (g_do_tagpreview)
+	if (g_do_tagpreview != 0)
 	    use_tagstack = FALSE;
 	else
 #endif
@@ -222,7 +222,7 @@ do_tag(tag, type, count, forceit, verbose)
 		    ))
 	{
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	    if (g_do_tagpreview)
+	    if (g_do_tagpreview != 0)
 	    {
 		if (ptag_entry.tagname != NULL
 			&& STRCMP(ptag_entry.tagname, tag) == 0)
@@ -278,7 +278,7 @@ do_tag(tag, type, count, forceit, verbose)
 	{
 	    if (
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-		    g_do_tagpreview ? ptag_entry.tagname == NULL :
+		    g_do_tagpreview != 0 ? ptag_entry.tagname == NULL :
 #endif
 		    tagstacklen == 0)
 	    {
@@ -361,7 +361,7 @@ do_tag(tag, type, count, forceit, verbose)
 	       )
 	    {
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-		if (g_do_tagpreview)
+		if (g_do_tagpreview != 0)
 		{
 		    cur_match = ptag_entry.cur_match;
 		    cur_fnum = ptag_entry.cur_fnum;
@@ -399,7 +399,7 @@ do_tag(tag, type, count, forceit, verbose)
 		prevtagstackidx = tagstackidx;
 
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-		if (g_do_tagpreview)
+		if (g_do_tagpreview != 0)
 		{
 		    cur_match = ptag_entry.cur_match;
 		    cur_fnum = ptag_entry.cur_fnum;
@@ -437,7 +437,7 @@ do_tag(tag, type, count, forceit, verbose)
 	}
 
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	if (g_do_tagpreview)
+	if (g_do_tagpreview != 0)
 	{
 	    if (type != DT_SELECT && type != DT_JUMP)
 	    {
@@ -492,7 +492,7 @@ do_tag(tag, type, count, forceit, verbose)
 	if (use_tagstack)
 	    name = tagstack[tagstackidx].tagname;
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	else if (g_do_tagpreview)
+	else if (g_do_tagpreview != 0)
 	    name = ptag_entry.tagname;
 #endif
 	else
@@ -620,7 +620,7 @@ do_tag(tag, type, count, forceit, verbose)
 		    parse_match(matches[i], &tagp);
 		    if (!new_tag && (
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-				(g_do_tagpreview
+				(g_do_tagpreview != 0
 				 && i == ptag_entry.cur_match) ||
 #endif
 				(use_tagstack
@@ -775,17 +775,25 @@ do_tag(tag, type, count, forceit, verbose)
 	    {
 		list_T	*list;
 		char_u	tag_name[128 + 1];
-		char_u	fname[MAXPATHL + 1];
-		char_u	cmd[CMDBUFFSIZE + 1];
+		char_u	*fname;
+		char_u	*cmd;
 
 		/*
 		 * Add the matching tags to the location list for the current
 		 * window.
 		 */
 
+		fname = alloc(MAXPATHL + 1);
+		cmd = alloc(CMDBUFFSIZE + 1);
 		list = list_alloc();
-		if (list == NULL)
+		if (list == NULL || fname == NULL || cmd == NULL)
+		{
+		    vim_free(cmd);
+		    vim_free(fname);
+		    if (list != NULL)
+			list_free(list, TRUE);
 		    goto end_do_tag;
+		}
 
 		for (i = 0; i < num_matches; ++i)
 		{
@@ -806,7 +814,7 @@ do_tag(tag, type, count, forceit, verbose)
 		    p = tag_full_fname(&tagp);
 		    if (p == NULL)
 			continue;
-		    STRCPY(fname, p);
+		    vim_strncpy(fname, p, MAXPATHL);
 		    vim_free(p);
 
 		    /*
@@ -911,6 +919,8 @@ do_tag(tag, type, count, forceit, verbose)
 		set_errorlist(curwin, list, ' ', IObuff);
 
 		list_free(list, TRUE);
+		vim_free(fname);
+		vim_free(cmd);
 
 		cur_match = 0;		/* Jump to the first tag */
 	    }
@@ -962,7 +972,7 @@ do_tag(tag, type, count, forceit, verbose)
 		++tagstackidx;
 	    }
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	    else if (g_do_tagpreview)
+	    else if (g_do_tagpreview != 0)
 	    {
 		ptag_entry.cur_match = cur_match;
 		ptag_entry.cur_fnum = cur_fnum;
@@ -3110,7 +3120,7 @@ jumpto_tag(lbuf, forceit, keep_help)
 #endif
 
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-    if (g_do_tagpreview)
+    if (g_do_tagpreview != 0)
     {
 	postponed_split = 0;	/* don't split again below */
 	curwin_save = curwin;	/* Save current window */
@@ -3148,7 +3158,7 @@ jumpto_tag(lbuf, forceit, keep_help)
 	/* A :ta from a help file will keep the b_help flag set.  For ":ptag"
 	 * we need to use the flag from the window where we came from. */
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	if (g_do_tagpreview)
+	if (g_do_tagpreview != 0)
 	    keep_help_flag = curwin_save->w_buffer->b_help;
 	else
 #endif
@@ -3322,7 +3332,8 @@ jumpto_tag(lbuf, forceit, keep_help)
 	}
 
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
-	if (g_do_tagpreview && curwin != curwin_save && win_valid(curwin_save))
+	if (g_do_tagpreview != 0
+			   && curwin != curwin_save && win_valid(curwin_save))
 	{
 	    /* Return cursor to where we were */
 	    validate_cursor();
@@ -3776,8 +3787,9 @@ add_tag_field(dict, field_name, start, end)
     char_u  *start;		/* start of the value */
     char_u  *end;		/* after the value; can be NULL */
 {
-    char_u	buf[MAXPATHL];
+    char_u	*buf;
     int		len = 0;
+    int		retval;
 
     /* check that the field name doesn't exist yet */
     if (dict_find(dict, (char_u *)field_name, -1) != NULL)
@@ -3790,6 +3802,9 @@ add_tag_field(dict, field_name, start, end)
 	}
 	return FAIL;
     }
+    buf = alloc(MAXPATHL);
+    if (buf == NULL)
+	return FAIL;
     if (start != NULL)
     {
 	if (end == NULL)
@@ -3799,12 +3814,14 @@ add_tag_field(dict, field_name, start, end)
 		--end;
 	}
 	len = (int)(end - start);
-	if (len > (int)sizeof(buf) - 1)
-	    len = sizeof(buf) - 1;
+	if (len > MAXPATHL - 1)
+	    len = MAXPATHL - 1;
 	vim_strncpy(buf, start, len);
     }
     buf[len] = NUL;
-    return dict_add_nr_str(dict, field_name, 0L, buf);
+    retval = dict_add_nr_str(dict, field_name, 0L, buf);
+    vim_free(buf);
+    return retval;
 }
 
 /*

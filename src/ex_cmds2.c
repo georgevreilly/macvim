@@ -1115,7 +1115,7 @@ ex_profile(eap)
 static enum
 {
     PEXP_SUBCMD,	/* expand :profile sub-commands */
-    PEXP_FUNC,		/* expand :profile func {funcname} */
+    PEXP_FUNC		/* expand :profile func {funcname} */
 } pexpand_what;
 
 static char *pexpand_cmds[] = {
@@ -1501,7 +1501,7 @@ vim_dialog_save_changes(buf)
 		(buf->b_fname != NULL)
 		    ? (char_u *)_("&Save\n&Cancel\n&Don't Save")
 		    : (char_u *)_("&Save...\n&Cancel\n&Don't Save"),
-		1, NULL))
+		1, NULL, FALSE))
     {
 	case 1: return VIM_YES;
 	case 3: return VIM_NO;
@@ -1528,7 +1528,7 @@ vim_dialog_save_all_changes(buf)
 			    "them."),
 		(char_u *)_("&Save\n&Don't Save\nS&ave All\nD&iscard All\n"
 			    "&Cancel"),
-		1, NULL))
+		1, NULL, FALSE))
     {
 	case 1: return VIM_YES;
 	case 2: return VIM_NO;
@@ -1549,7 +1549,7 @@ dialog_changed(buf, checkall)
     buf_T	*buf;
     int		checkall;	/* may abandon all changed buffers */
 {
-    char_u	buff[IOSIZE];
+    char_u	buff[DIALOG_MSG_SIZE];
     int		ret;
     buf_T	*buf2;
 

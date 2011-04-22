@@ -283,7 +283,7 @@ static struct signalinfo
 #ifdef SIGTERM
     {SIGTERM,	    "TERM",	TRUE},
 #endif
-#ifdef SIGVTALRM
+#if defined(SIGVTALRM) && !defined(FEAT_RUBY)
     {SIGVTALRM,	    "VTALRM",	TRUE},
 #endif
 #if defined(SIGPROF) && !defined(FEAT_MZSCHEME) && !defined(WE_ARE_PROFILING)
@@ -1107,7 +1107,7 @@ deathtrap SIGDEFARG(sigarg)
  * On Linux, signal is not always handled immediately either.
  * See https://bugs.launchpad.net/bugs/291373
  *
- * volatile because it is used in in signal handler sigcont_handler().
+ * volatile because it is used in signal handler sigcont_handler().
  */
 static volatile int sigcont_received;
 static RETSIGTYPE sigcont_handler __ARGS(SIGPROTOARG);
@@ -3725,6 +3725,12 @@ mch_call_shell(cmd, options)
 # endif
 
     out_flush();
+#ifdef FEAT_GUI_MACVIM
+    /* It is conceivable that the shell command will take a long time to finish
+     * so force a flush now. */
+    if (gui.in_use)
+	gui_macvim_force_flush();
+#endif
 
     if (options & SHELL_COOKED)
 	settmode(TMODE_COOK);	    /* set to normal mode */
@@ -3846,6 +3852,12 @@ mch_call_shell(cmd, options)
 	goto error;
 
     out_flush();
+#ifdef FEAT_GUI_MACVIM
+    /* It is conceivable that the shell command will take a long time to finish
+     * so force a flush now. */
+    if (gui.in_use)
+	gui_macvim_force_flush();
+#endif
     if (options & SHELL_COOKED)
 	settmode(TMODE_COOK);		/* set to normal mode */
 
@@ -4251,7 +4263,7 @@ mch_call_shell(cmd, options)
 				 * should not have one. */
 				if (lnum != curbuf->b_op_end.lnum
 					|| !curbuf->b_p_bin
-					|| (lnum != write_no_eol_lnum
+					|| (lnum != curbuf->b_no_eol_lnum
 					    && (lnum !=
 						    curbuf->b_ml.ml_line_count
 						    || curbuf->b_p_eol)))
@@ -4598,10 +4610,10 @@ finished:
 		    {
 			append_ga_line(&ga);
 			/* remember that the NL was missing */
-			write_no_eol_lnum = curwin->w_cursor.lnum;
+			curbuf->b_no_eol_lnum = curwin->w_cursor.lnum;
 		    }
 		    else
-			write_no_eol_lnum = 0;
+			curbuf->b_no_eol_lnum = 0;
 		    ga_clear(&ga);
 		}
 
@@ -5735,6 +5747,7 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 	if (shell_style == STYLE_PRINT && !did_find_nul)
 	{
 	    /* If there is a NUL, set did_find_nul, else set check_spaces */
+	    buffer[len] = NUL;
 	    if (len && (int)STRLEN(buffer) < (int)len - 1)
 		did_find_nul = TRUE;
 	    else
@@ -6604,7 +6617,7 @@ do_xterm_trace()
 	    xterm_hints.x = 2;
 	return TRUE;
     }
-    if (mouse_code == NULL)
+    if (mouse_code == NULL || STRLEN(mouse_code) > 45)
     {
 	xterm_trace = 0;
 	return FALSE;

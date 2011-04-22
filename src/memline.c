@@ -4071,9 +4071,9 @@ attention_message(buf, fname)
     }
     /* Some of these messages are long to allow translation to
      * other languages. */
-    MSG_PUTS(_("\n(1) Another program may be editing the same file.\n    If this is the case, be careful not to end up with two\n    different instances of the same file when making changes.\n"));
-    MSG_PUTS(_("    Quit, or continue with caution.\n"));
-    MSG_PUTS(_("\n(2) An edit session for this file crashed.\n"));
+    MSG_PUTS(_("\n(1) Another program may be editing the same file.  If this is the case,\n    be careful not to end up with two different instances of the same\n    file when making changes."));
+    MSG_PUTS(_("  Quit, or continue with caution.\n"));
+    MSG_PUTS(_("(2) An edit session for this file crashed.\n"));
     MSG_PUTS(_("    If this is the case, use \":recover\" or \"vim -r "));
     msg_outtrans(buf->b_fname);
     MSG_PUTS(_("\"\n    to recover the changes (see \":help recovery\").\n"));
@@ -4516,7 +4516,7 @@ findswapname(buf, dirp, old_fname)
 				    process_still_running
 					? (char_u *)_("&Open Read-Only\n&Edit anyway\n&Recover\n&Quit\n&Abort") :
 # endif
-					(char_u *)_("&Open Read-Only\n&Edit anyway\n&Recover\n&Delete it\n&Quit\n&Abort"), 1, NULL);
+					(char_u *)_("&Open Read-Only\n&Edit anyway\n&Recover\n&Delete it\n&Quit\n&Abort"), 1, NULL, FALSE);
 
 # if defined(UNIX) || defined(__EMX__) || defined(VMS)
 			if (process_still_running && choice >= 4)

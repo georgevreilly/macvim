@@ -4418,7 +4418,7 @@ do_set(arg, opt_flags)
 		    p = find_termcode(key_name);
 		    if (p == NULL)
 		    {
-			errmsg = (char_u *)N_("E518: Unknown option");
+			errmsg = (char_u *)N_("E846: Key code not set");
 			goto skip;
 		    }
 		    else
@@ -4766,8 +4766,8 @@ do_set(arg, opt_flags)
 						|| s[i] == ','
 						|| s[i] == NUL))
 					break;
-				    /* Count backspaces.  Only a comma with an
-				     * even number of backspaces before it is
+				    /* Count backslashes.  Only a comma with an
+				     * even number of backslashes before it is
 				     * recognized as a separator */
 				    if (s > origval && s[-1] == '\\')
 					++bs;
@@ -11438,16 +11438,19 @@ save_file_ff(buf)
  * from when editing started (save_file_ff() called).
  * Also when 'endofline' was changed and 'binary' is set, or when 'bomb' was
  * changed and 'binary' is not set.
- * Don't consider a new, empty buffer to be changed.
+ * When "ignore_empty" is true don't consider a new, empty buffer to be
+ * changed.
  */
     int
-file_ff_differs(buf)
+file_ff_differs(buf, ignore_empty)
     buf_T	*buf;
+    int		ignore_empty;
 {
     /* In a buffer that was never loaded the options are not valid. */
     if (buf->b_flags & BF_NEVERLOADED)
 	return FALSE;
-    if ((buf->b_flags & BF_NEW)
+    if (ignore_empty
+	    && (buf->b_flags & BF_NEW)
 	    && buf->b_ml.ml_line_count == 1
 	    && *ml_get_buf(buf, (linenr_T)1, FALSE) == NUL)
 	return FALSE;

@@ -3184,7 +3184,7 @@ maketitle()
 	    /* format: "fname + (path) (1 of 2) - VIM" */
 
 	    if (curbuf->b_fname == NULL)
-		STRCPY(buf, _("[No Name]"));
+		vim_strncpy(buf, (char_u *)_("[No Name]"), IOSIZE - 100);
 	    else
 	    {
 		p = transstr(gettail(curbuf->b_fname));
@@ -3242,7 +3242,7 @@ maketitle()
 	    if (serverName != NULL)
 	    {
 		STRCAT(buf, " - ");
-		STRCAT(buf, serverName);
+		vim_strcat(buf, serverName, IOSIZE);
 	    }
 	    else
 #endif
@@ -3374,7 +3374,8 @@ free_titles()
  * or truncated if too long, fillchar is used for all whitespace.
  */
     int
-build_stl_str_hl(wp, out, outlen, fmt, use_sandbox, fillchar, maxwidth, hltab, tabtab)
+build_stl_str_hl(wp, out, outlen, fmt, use_sandbox, fillchar,
+						      maxwidth, hltab, tabtab)
     win_T	*wp;
     char_u	*out;		/* buffer to write into != NameBuff */
     size_t	outlen;		/* length of out[] */
@@ -3469,6 +3470,18 @@ build_stl_str_hl(wp, out, outlen, fmt, use_sandbox, fillchar, maxwidth, hltab, t
     prevchar_isitem = FALSE;
     for (s = usefmt; *s; )
     {
+	if (curitem == STL_MAX_ITEM)
+	{
+	    /* There are too many items.  Add the error code to the statusline
+	     * to give the user a hint about what went wrong. */
+	    if (p + 6 < out + outlen)
+	    {
+		mch_memmove(p, " E541", (size_t)5);
+		p += 5;
+	    }
+	    break;
+	}
+
 	if (*s != NUL && *s != '%')
 	    prevchar_isflag = prevchar_isitem = FALSE;
 
@@ -3484,6 +3497,8 @@ build_stl_str_hl(wp, out, outlen, fmt, use_sandbox, fillchar, maxwidth, hltab, t
 	 * Handle one '%' item.
 	 */
 	s++;
+	if (*s == NUL)  /* ignore trailing % */
+	    break;
 	if (*s == '%')
 	{
 	    if (p + 1 >= out + outlen)
