@@ -500,18 +500,10 @@ dbg_parsearg(arg, gap)
 	/* Expand the file name in the same way as do_source().  This means
 	 * doing it twice, so that $DIR/file gets expanded when $DIR is
 	 * "~/dir". */
-#ifdef RISCOS
-	q = mch_munge_fname(p);
-#else
 	q = expand_env_save(p);
-#endif
 	if (q == NULL)
 	    return FAIL;
-#ifdef RISCOS
-	p = mch_munge_fname(q);
-#else
 	p = expand_env_save(q);
-#endif
 	vim_free(q);
 	if (p == NULL)
 	    return FAIL;
@@ -690,10 +682,12 @@ ex_breaklist(eap)
 	for (i = 0; i < dbg_breakp.ga_len; ++i)
 	{
 	    bp = &BREAKP(i);
+	    if (bp->dbg_type == DBG_FILE)
+		home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, TRUE);
 	    smsg((char_u *)_("%3d  %s %s  line %ld"),
 		    bp->dbg_nr,
 		    bp->dbg_type == DBG_FUNC ? "func" : "file",
-		    bp->dbg_name,
+		    bp->dbg_type == DBG_FUNC ? bp->dbg_name : NameBuff,
 		    (long)bp->dbg_lnum);
 	}
 }
@@ -1541,7 +1535,7 @@ vim_dialog_save_all_changes(buf)
 #endif
 
 /*
- * Ask the user what to do when abondoning a changed buffer.
+ * Ask the user what to do when abandoning a changed buffer.
  * Must check 'write' option first!
  */
     void
@@ -3013,11 +3007,7 @@ do_source(fname, check_other, is_vimrc)
     proftime_T		    wait_start;
 #endif
 
-#ifdef RISCOS
-    p = mch_munge_fname(fname);
-#else
     p = expand_env_save(fname);
-#endif
     if (p == NULL)
 	return retval;
     fname_exp = fix_fname(p);
@@ -3353,7 +3343,11 @@ ex_scriptnames(eap)
 
     for (i = 1; i <= script_items.ga_len && !got_int; ++i)
 	if (SCRIPT_ITEM(i).sn_name != NULL)
-	    smsg((char_u *)"%3d: %s", i, SCRIPT_ITEM(i).sn_name);
+	{
+	    home_replace(NULL, SCRIPT_ITEM(i).sn_name,
+						    NameBuff, MAXPATHL, TRUE);
+	    smsg((char_u *)"%3d: %s", i, NameBuff);
+        }
 }
 
 # if defined(BACKSLASH_IN_FILENAME) || defined(PROTO)
@@ -4238,6 +4232,82 @@ ex_language(eap)
 }
 
 # if defined(FEAT_CMDL_COMPL) || defined(PROTO)
+
+static char_u	**locales = NULL;	/* Array of all available locales */
+static int	did_init_locales = FALSE;
+
+static void init_locales __ARGS((void));
+static char_u **find_locales __ARGS((void));
+
+/*
+ * Lazy initialization of all available locales.
+ */
+    static void
+init_locales()
+{
+    if (!did_init_locales)
+    {
+	did_init_locales = TRUE;
+	locales = find_locales();
+    }
+}
+
+/* Return an array of strings for all available locales + NULL for the
+ * last element.  Return NULL in case of error. */
+    static char_u **
+find_locales()
+{
+    garray_T	locales_ga;
+    char_u	*loc;
+
+    /* Find all available locales by running command "locale -a".  If this
+     * doesn't work we won't have completion. */
+    char_u *locale_a = get_cmd_output((char_u *)"locale -a",
+							NULL, SHELL_SILENT);
+    if (locale_a == NULL)
+	return NULL;
+    ga_init2(&locales_ga, sizeof(char_u *), 20);
+
+    /* Transform locale_a string where each locale is separated by "\n"
+     * into an array of locale strings. */
+    loc = (char_u *)strtok((char *)locale_a, "\n");
+
+    while (loc != NULL)
+    {
+	if (ga_grow(&locales_ga, 1) == FAIL)
+	    break;
+	loc = vim_strsave(loc);
+	if (loc == NULL)
+	    break;
+
+	((char_u **)locales_ga.ga_data)[locales_ga.ga_len++] = loc;
+	loc = (char_u *)strtok(NULL, "\n");
+    }
+    vim_free(locale_a);
+    if (ga_grow(&locales_ga, 1) == FAIL)
+    {
+	ga_clear(&locales_ga);
+	return NULL;
+    }
+    ((char_u **)locales_ga.ga_data)[locales_ga.ga_len] = NULL;
+    return (char_u **)locales_ga.ga_data;
+}
+
+#  if defined(EXITFREE) || defined(PROTO)
+    void
+free_locales()
+{
+    int			i;
+    if (locales != NULL)
+    {
+	for (i = 0; locales[i] != NULL; i++)
+	    vim_free(locales[i]);
+	vim_free(locales);
+	locales = NULL;
+    }
+}
+#  endif
+
 /*
  * Function given to ExpandGeneric() to obtain the possible arguments of the
  * ":language" command.
@@ -4253,7 +4323,25 @@ get_lang_arg(xp, idx)
 	return (char_u *)"ctype";
     if (idx == 2)
 	return (char_u *)"time";
-    return NULL;
+
+    init_locales();
+    if (locales == NULL)
+	return NULL;
+    return locales[idx - 3];
+}
+
+/*
+ * Function given to ExpandGeneric() to obtain the available locales.
+ */
+    char_u *
+get_locales(xp, idx)
+    expand_T	*xp UNUSED;
+    int		idx;
+{
+    init_locales();
+    if (locales == NULL)
+	return NULL;
+    return locales[idx];
 }
 # endif
 

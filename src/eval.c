@@ -352,7 +352,7 @@ static struct vimvar
     {VV_NAME("swapname",	 VAR_STRING), VV_RO},
     {VV_NAME("swapchoice",	 VAR_STRING), 0},
     {VV_NAME("swapcommand",	 VAR_STRING), VV_RO},
-    {VV_NAME("char",		 VAR_STRING), VV_RO},
+    {VV_NAME("char",		 VAR_STRING), 0},
     {VV_NAME("mouse_win",	 VAR_NUMBER), 0},
     {VV_NAME("mouse_lnum",	 VAR_NUMBER), 0},
     {VV_NAME("mouse_col",	 VAR_NUMBER), 0},
@@ -911,6 +911,7 @@ eval_clear()
     hash_clear(&compat_hashtab);
 
     free_scriptnames();
+    free_locales();
 
     /* global variables */
     vars_clear(&globvarht);
@@ -2794,6 +2795,8 @@ get_lval(name, rettv, lp, unlet, skip, quiet, fne_flags)
 	    {
 		if (lp->ll_range && !lp->ll_empty2)
 		    clear_tv(&var2);
+		if (!quiet)
+		    EMSGN(_(e_listidx), lp->ll_n1);
 		return NULL;
 	    }
 
@@ -2811,7 +2814,11 @@ get_lval(name, rettv, lp, unlet, skip, quiet, fne_flags)
 		{
 		    ni = list_find(lp->ll_list, lp->ll_n2);
 		    if (ni == NULL)
+		    {
+			if (!quiet)
+			    EMSGN(_(e_listidx), lp->ll_n2);
 			return NULL;
+		    }
 		    lp->ll_n2 = list_idx_of_item(lp->ll_list, ni);
 		}
 
@@ -2819,7 +2826,11 @@ get_lval(name, rettv, lp, unlet, skip, quiet, fne_flags)
 		if (lp->ll_n1 < 0)
 		    lp->ll_n1 = list_idx_of_item(lp->ll_list, lp->ll_li);
 		if (lp->ll_n2 < lp->ll_n1)
+		{
+		    if (!quiet)
+			EMSGN(_(e_listidx), lp->ll_n2);
 		    return NULL;
+		}
 	    }
 
 	    lp->ll_tv = &lp->ll_li->li_tv;
@@ -7920,7 +7931,7 @@ static struct fst
     {"sin",		1, 1, f_sin},
     {"sinh",		1, 1, f_sinh},
 #endif
-    {"sort",		1, 2, f_sort},
+    {"sort",		1, 3, f_sort},
     {"soundfold",	1, 1, f_soundfold},
     {"spellbadword",	0, 1, f_spellbadword},
     {"spellsuggest",	1, 3, f_spellsuggest},
@@ -11816,9 +11827,6 @@ f_has(argvars, rettv)
 #ifdef __QNX__
 	"qnx",
 #endif
-#ifdef RISCOS
-	"riscos",
-#endif
 #ifdef UNIX
 	"unix",
 #endif
@@ -12082,9 +12090,6 @@ f_has(argvars, rettv)
 #endif
 #ifdef FEAT_OLE
 	"ole",
-#endif
-#ifdef FEAT_OSFILETYPE
-	"osfiletype",
 #endif
 #ifdef FEAT_PATH_EXTRA
 	"path_extra",
@@ -15004,7 +15009,10 @@ f_resolve(argvars, rettv)
 
 	len = STRLEN(p);
 	if (len > 0 && after_pathsep(p, p + len))
+	{
 	    has_trailing_pathsep = TRUE;
+	    p[len - 1] = NUL; /* the trailing slash breaks readlink() */
+	}
 
 	q = getnextcomp(p);
 	if (*q != NUL)
@@ -16386,6 +16394,7 @@ static int
 
 static int	item_compare_ic;
 static char_u	*item_compare_func;
+static dict_T	*item_compare_selfdict;
 static int	item_compare_func_err;
 #define ITEM_COMPARE_FAIL 999
 
@@ -16445,7 +16454,8 @@ item_compare2(s1, s2)
 
     rettv.v_type = VAR_UNKNOWN;		/* clear_tv() uses this */
     res = call_func(item_compare_func, (int)STRLEN(item_compare_func),
-				 &rettv, 2, argv, 0L, 0L, &dummy, TRUE, NULL);
+				 &rettv, 2, argv, 0L, 0L, &dummy, TRUE,
+				 item_compare_selfdict);
     clear_tv(&argv[0]);
     clear_tv(&argv[1]);
 
@@ -16491,8 +16501,10 @@ f_sort(argvars, rettv)
 
 	item_compare_ic = FALSE;
 	item_compare_func = NULL;
+	item_compare_selfdict = NULL;
 	if (argvars[1].v_type != VAR_UNKNOWN)
 	{
+	    /* optional second argument: {func} */
 	    if (argvars[1].v_type == VAR_FUNC)
 		item_compare_func = argvars[1].vval.v_string;
 	    else
@@ -16506,6 +16518,17 @@ f_sort(argvars, rettv)
 		    item_compare_ic = TRUE;
 		else
 		    item_compare_func = get_tv_string(&argvars[1]);
+	    }
+
+	    if (argvars[2].v_type != VAR_UNKNOWN)
+	    {
+		/* optional third argument: {dict} */
+		if (argvars[2].v_type != VAR_DICT)
+		{
+		    EMSG(_(e_dictreq));
+		    return;
+		}
+		item_compare_selfdict = argvars[2].vval.v_dict;
 	    }
 	}
 

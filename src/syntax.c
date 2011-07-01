@@ -559,7 +559,13 @@ syntax_start(wp, lnum)
     if (INVALID_STATE(&current_state))
     {
 	syn_sync(wp, lnum, last_valid);
-	first_stored = current_lnum + syn_block->b_syn_sync_minlines;
+	if (current_lnum == 1)
+	    /* First line is always valid, no matter "minlines". */
+	    first_stored = 1;
+	else
+	    /* Need to parse "minlines" lines before state can be considered
+	     * valid to store. */
+	    first_stored = current_lnum + syn_block->b_syn_sync_minlines;
     }
     else
 	first_stored = current_lnum;
@@ -990,7 +996,10 @@ syn_start_line()
      * previous line and regions that have "keepend".
      */
     if (current_state.ga_len > 0)
+    {
 	syn_update_ends(TRUE);
+	check_state_ends();
+    }
 
     next_match_idx = -1;
     ++current_line_id;
@@ -1064,7 +1073,6 @@ syn_update_ends(startofline)
 	}
     }
     check_keepend();
-    check_state_ends();
 }
 
 /****************************************
@@ -2533,7 +2541,7 @@ push_next_match(cur_si)
 check_state_ends()
 {
     stateitem_T	*cur_si;
-    int		had_extend = FALSE;
+    int		had_extend;
 
     cur_si = &CUR_STATE(current_state.ga_len - 1);
     for (;;)
@@ -2566,6 +2574,9 @@ check_state_ends()
 #endif
 		update_si_attr(current_state.ga_len - 1);
 
+		/* nextgroup= should not match in the end pattern */
+		current_next_list = NULL;
+
 		/* what matches next may be different now, clear it */
 		next_match_idx = 0;
 		next_match_col = MAXCOL;
@@ -2583,8 +2594,7 @@ check_state_ends()
 
 		/* When the ended item has "extend", another item with
 		 * "keepend" now needs to check for its end. */
-		 if (cur_si->si_flags & HL_EXTEND)
-		     had_extend = TRUE;
+		 had_extend = (cur_si->si_flags & HL_EXTEND);
 
 		pop_current_state();
 

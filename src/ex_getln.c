@@ -110,7 +110,7 @@ static int	ExpandFromContext __ARGS((expand_T *xp, char_u *, int *, char_u ***, 
 static int	expand_showtail __ARGS((expand_T *xp));
 #ifdef FEAT_CMDL_COMPL
 static int	expand_shellcmd __ARGS((char_u *filepat, int *num_file, char_u ***file, int flagsarg));
-static int	ExpandRTDir __ARGS((char_u *pat, int *num_file, char_u ***file, char *dirname));
+static int	ExpandRTDir __ARGS((char_u *pat, int *num_file, char_u ***file, char *dirname[]));
 # if defined(FEAT_USR_CMDS) && defined(FEAT_EVAL)
 static int	ExpandUserDefined __ARGS((expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***file));
 static int	ExpandUserList __ARGS((expand_T *xp, int *num_file, char_u ***file));
@@ -3713,6 +3713,7 @@ ExpandEscape(xp, str, numfiles, files, options)
     if (options & WILD_ESCAPE)
     {
 	if (xp->xp_context == EXPAND_FILES
+		|| xp->xp_context == EXPAND_FILES_IN_PATH
 		|| xp->xp_context == EXPAND_SHELLCMD
 		|| xp->xp_context == EXPAND_BUFFERS
 		|| xp->xp_context == EXPAND_DIRECTORIES)
@@ -4546,13 +4547,25 @@ ExpandFromContext(xp, pat, num_file, file, options)
 	    || xp->xp_context == EXPAND_TAGS_LISTFILES)
 	return expand_tags(xp->xp_context == EXPAND_TAGS, pat, num_file, file);
     if (xp->xp_context == EXPAND_COLORS)
-	return ExpandRTDir(pat, num_file, file, "colors");
+    {
+	char *directories[] = {"colors", NULL};
+	return ExpandRTDir(pat, num_file, file, directories);
+    }
     if (xp->xp_context == EXPAND_COMPILER)
-	return ExpandRTDir(pat, num_file, file, "compiler");
+    {
+	char *directories[] = {"colors", NULL};
+	return ExpandRTDir(pat, num_file, file, directories);
+    }
     if (xp->xp_context == EXPAND_OWNSYNTAX)
-	return ExpandRTDir(pat, num_file, file, "syntax");
+    {
+	char *directories[] = {"syntax", NULL};
+	return ExpandRTDir(pat, num_file, file, directories);
+    }
     if (xp->xp_context == EXPAND_FILETYPE)
-	return ExpandRTDir(pat, num_file, file, "{syntax,indent,ftplugin}");
+    {
+	char *directories[] = {"syntax", "indent", "ftplugin", NULL};
+	return ExpandRTDir(pat, num_file, file, directories);
+    }
 # if defined(FEAT_USR_CMDS) && defined(FEAT_EVAL)
     if (xp->xp_context == EXPAND_USER_LIST)
 	return ExpandUserList(xp, num_file, file);
@@ -4581,50 +4594,52 @@ ExpandFromContext(xp, pat, num_file, file, options)
 	    int		context;
 	    char_u	*((*func)__ARGS((expand_T *, int)));
 	    int		ic;
+	    int		escaped;
 	} tab[] =
 	{
-	    {EXPAND_COMMANDS, get_command_name, FALSE},
-	    {EXPAND_BEHAVE, get_behave_arg, TRUE},
+	    {EXPAND_COMMANDS, get_command_name, FALSE, TRUE},
+	    {EXPAND_BEHAVE, get_behave_arg, TRUE, TRUE},
 #ifdef FEAT_USR_CMDS
-	    {EXPAND_USER_COMMANDS, get_user_commands, FALSE},
-	    {EXPAND_USER_CMD_FLAGS, get_user_cmd_flags, FALSE},
-	    {EXPAND_USER_NARGS, get_user_cmd_nargs, FALSE},
-	    {EXPAND_USER_COMPLETE, get_user_cmd_complete, FALSE},
+	    {EXPAND_USER_COMMANDS, get_user_commands, FALSE, TRUE},
+	    {EXPAND_USER_CMD_FLAGS, get_user_cmd_flags, FALSE, TRUE},
+	    {EXPAND_USER_NARGS, get_user_cmd_nargs, FALSE, TRUE},
+	    {EXPAND_USER_COMPLETE, get_user_cmd_complete, FALSE, TRUE},
 #endif
 #ifdef FEAT_EVAL
-	    {EXPAND_USER_VARS, get_user_var_name, FALSE},
-	    {EXPAND_FUNCTIONS, get_function_name, FALSE},
-	    {EXPAND_USER_FUNC, get_user_func_name, FALSE},
-	    {EXPAND_EXPRESSION, get_expr_name, FALSE},
+	    {EXPAND_USER_VARS, get_user_var_name, FALSE, TRUE},
+	    {EXPAND_FUNCTIONS, get_function_name, FALSE, TRUE},
+	    {EXPAND_USER_FUNC, get_user_func_name, FALSE, TRUE},
+	    {EXPAND_EXPRESSION, get_expr_name, FALSE, TRUE},
 #endif
 #ifdef FEAT_MENU
-	    {EXPAND_MENUS, get_menu_name, FALSE},
-	    {EXPAND_MENUNAMES, get_menu_names, FALSE},
+	    {EXPAND_MENUS, get_menu_name, FALSE, TRUE},
+	    {EXPAND_MENUNAMES, get_menu_names, FALSE, TRUE},
 #endif
 #ifdef FEAT_SYN_HL
-	    {EXPAND_SYNTAX, get_syntax_name, TRUE},
+	    {EXPAND_SYNTAX, get_syntax_name, TRUE, TRUE},
 #endif
-	    {EXPAND_HIGHLIGHT, get_highlight_name, TRUE},
+	    {EXPAND_HIGHLIGHT, get_highlight_name, TRUE, TRUE},
 #ifdef FEAT_AUTOCMD
-	    {EXPAND_EVENTS, get_event_name, TRUE},
-	    {EXPAND_AUGROUP, get_augroup_name, TRUE},
+	    {EXPAND_EVENTS, get_event_name, TRUE, TRUE},
+	    {EXPAND_AUGROUP, get_augroup_name, TRUE, TRUE},
 #endif
 #ifdef FEAT_CSCOPE
-	    {EXPAND_CSCOPE, get_cscope_name, TRUE},
+	    {EXPAND_CSCOPE, get_cscope_name, TRUE, TRUE},
 #endif
 #ifdef FEAT_SIGNS
-	    {EXPAND_SIGN, get_sign_name, TRUE},
+	    {EXPAND_SIGN, get_sign_name, TRUE, TRUE},
 #endif
 #ifdef FEAT_PROFILE
-	    {EXPAND_PROFILE, get_profile_name, TRUE},
+	    {EXPAND_PROFILE, get_profile_name, TRUE, TRUE},
 #endif
 #if (defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
 	&& (defined(FEAT_GETTEXT) || defined(FEAT_MBYTE))
-	    {EXPAND_LANGUAGE, get_lang_arg, TRUE},
+	    {EXPAND_LANGUAGE, get_lang_arg, TRUE, FALSE},
+	    {EXPAND_LOCALES, get_locales, TRUE, FALSE},
 #endif
-	    {EXPAND_ENV_VARS, get_env_name, TRUE},
+	    {EXPAND_ENV_VARS, get_env_name, TRUE, TRUE},
 #ifdef FEAT_GUI_MACVIM
-	    {EXPAND_MACACTION, get_macaction_name, FALSE},
+	    {EXPAND_MACACTION, get_macaction_name, FALSE, FALSE},
 #endif
 	};
 	int	i;
@@ -4639,7 +4654,8 @@ ExpandFromContext(xp, pat, num_file, file, options)
 	    {
 		if (tab[i].ic)
 		    regmatch.rm_ic = TRUE;
-		ret = ExpandGeneric(xp, &regmatch, num_file, file, tab[i].func);
+		ret = ExpandGeneric(xp, &regmatch, num_file, file,
+                                                tab[i].func, tab[i].escaped);
 		break;
 	    }
     }
@@ -4661,13 +4677,14 @@ ExpandFromContext(xp, pat, num_file, file, options)
  * Returns OK when no problems encountered, FAIL for error (out of memory).
  */
     int
-ExpandGeneric(xp, regmatch, num_file, file, func)
+ExpandGeneric(xp, regmatch, num_file, file, func, escaped)
     expand_T	*xp;
     regmatch_T	*regmatch;
     int		*num_file;
     char_u	***file;
     char_u	*((*func)__ARGS((expand_T *, int)));
 					  /* returns a string from the list */
+    int		escaped;
 {
     int		i;
     int		count = 0;
@@ -4692,7 +4709,10 @@ ExpandGeneric(xp, regmatch, num_file, file, func)
 	    {
 		if (round)
 		{
-		    str = vim_strsave_escaped(str, (char_u *)" \t\\.");
+		    if (escaped)
+			str = vim_strsave_escaped(str, (char_u *)" \t\\.");
+		    else
+			str = vim_strsave(str);
 		    (*file)[count] = str;
 #ifdef FEAT_MENU
 		    if (func == get_menu_names && str != NULL)
@@ -5001,57 +5021,68 @@ ExpandUserList(xp, num_file, file)
 /*
  * Expand color scheme, compiler or filetype names:
  * 'runtimepath'/{dirnames}/{pat}.vim
- * dirnames may contain one directory (ex: "colorscheme") or can be a glob
- * expression matching multiple directories (ex: "{syntax,ftplugin,indent}").
+ * "dirnames" is an array with one or more directory names.
  */
     static int
 ExpandRTDir(pat, num_file, file, dirnames)
     char_u	*pat;
     int		*num_file;
     char_u	***file;
-    char	*dirnames;
+    char	*dirnames[];
 {
-    char_u	*all;
+    char_u	*matches;
     char_u	*s;
     char_u	*e;
     garray_T	ga;
+    int		i;
+    int		pat_len;
 
     *num_file = 0;
     *file = NULL;
-    s = alloc((unsigned)(STRLEN(pat) + STRLEN(dirnames) + 7));
-    if (s == NULL)
-	return FAIL;
-    sprintf((char *)s, "%s/%s*.vim", dirnames, pat);
-    all = globpath(p_rtp, s, 0);
-    vim_free(s);
-    if (all == NULL)
-	return FAIL;
+    pat_len = STRLEN(pat);
+    ga_init2(&ga, (int)sizeof(char *), 10);
 
-    ga_init2(&ga, (int)sizeof(char *), 3);
-    for (s = all; *s != NUL; s = e)
+    for (i = 0; dirnames[i] != NULL; ++i)
     {
-	e = vim_strchr(s, '\n');
-	if (e == NULL)
-	    e = s + STRLEN(s);
-	if (ga_grow(&ga, 1) == FAIL)
-	    break;
-	if (e - 4 > s && STRNICMP(e - 4, ".vim", 4) == 0)
+	s = alloc((unsigned)(STRLEN(dirnames[i]) + pat_len + 7));
+	if (s == NULL)
 	{
-	    for (s = e - 4; s > all; mb_ptr_back(all, s))
-		if (*s == '\n' || vim_ispathsep(*s))
-		    break;
-	    ++s;
-	    ((char_u **)ga.ga_data)[ga.ga_len] =
-					    vim_strnsave(s, (int)(e - s - 4));
-	    ++ga.ga_len;
+	    ga_clear_strings(&ga);
+	    return FAIL;
 	}
-	if (*e != NUL)
-	    ++e;
+	sprintf((char *)s, "%s/%s*.vim", dirnames[i], pat);
+	matches = globpath(p_rtp, s, 0);
+	vim_free(s);
+	if (matches == NULL)
+	    continue;
+
+	for (s = matches; *s != NUL; s = e)
+	{
+	    e = vim_strchr(s, '\n');
+	    if (e == NULL)
+		e = s + STRLEN(s);
+	    if (ga_grow(&ga, 1) == FAIL)
+		break;
+	    if (e - 4 > s && STRNICMP(e - 4, ".vim", 4) == 0)
+	    {
+		for (s = e - 4; s > matches; mb_ptr_back(matches, s))
+		    if (*s == '\n' || vim_ispathsep(*s))
+			break;
+		++s;
+		((char_u **)ga.ga_data)[ga.ga_len] =
+					    vim_strnsave(s, (int)(e - s - 4));
+		++ga.ga_len;
+	    }
+	    if (*e != NUL)
+		++e;
+	}
+	vim_free(matches);
     }
-    vim_free(all);
+    if (ga.ga_len == 0)
+        return FAIL;
 
     /* Sort and remove duplicates which can happen when specifying multiple
-     * directories in dirnames such as "{syntax,ftplugin,indent}". */
+     * directories in dirnames. */
     remove_duplicates(&ga);
 
     *file = ga.ga_data;
@@ -6336,6 +6367,12 @@ ex_window()
 	{
 	    ccline.cmdbuff = vim_strsave((char_u *)"qa");
 	    cmdwin_result = CAR;
+	}
+	else if (cmdwin_result == Ctrl_C)
+	{
+	    /* :q or :close, don't execute any command
+	     * and don't modify the cmd window. */
+	    ccline.cmdbuff = NULL;
 	}
 	else
 	    ccline.cmdbuff = vim_strsave(ml_get_curline());
