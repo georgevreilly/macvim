@@ -1812,9 +1812,6 @@ free_buf_options(buf, free_p_ff)
 #ifdef FEAT_AUTOCMD
     clear_string_option(&buf->b_p_ft);
 #endif
-#ifdef FEAT_OSFILETYPE
-    clear_string_option(&buf->b_p_oft);
-#endif
 #ifdef FEAT_CINDENT
     clear_string_option(&buf->b_p_cink);
     clear_string_option(&buf->b_p_cino);
@@ -2530,6 +2527,9 @@ get_winopts(buf)
     /* Set 'foldlevel' to 'foldlevelstart' if it's not negative. */
     if (p_fdls >= 0)
 	curwin->w_p_fdl = p_fdls;
+#endif
+#ifdef FEAT_SYN_HL
+    check_colorcolumn(curwin);
 #endif
 }
 

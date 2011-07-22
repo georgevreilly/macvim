@@ -1,6 +1,6 @@
 " Vim syntax support file
 " Maintainer: Ben Fritz <fritzophrenic@gmail.com>
-" Last Change: 2011 Jan 06
+" Last Change: 2011 May 27
 "
 " Additional contributors:
 "
@@ -32,6 +32,13 @@ else
 endif
 
 let s:settings = tohtml#GetUserSettings()
+
+" Whitespace
+if s:settings.pre_wrap
+  let s:whitespace = "white-space: pre-wrap; "
+else
+  let s:whitespace = ""
+endif
 
 " When not in gui we can only guess the colors.
 if has("gui_running")
@@ -628,11 +635,22 @@ if s:settings.dynamic_folds
   " close all folds again so we can get the fold text as we go
   silent! %foldclose!
 
+  " Go through and remove folds we don't need to (or cannot) process in the
+  " current conversion range
+  "
+  " If a fold is removed which contains other folds, which are included, we need
+  " to adjust the level of the included folds as used by the conversion logic
+  " (avoiding special cases is good)
+  "
+  " Note any time we remove a fold, either all of the included folds are in it,
+  " or none of them, because we only remove a fold if neither its start nor its
+  " end are within the conversion range.
+  let leveladjust = 0
   for afold in s:allfolds
     let removed = 0
     if exists("g:html_start_line") && exists("g:html_end_line")
       if afold.firstline < g:html_start_line
-	if afold.lastline < g:html_end_line && afold.lastline > g:html_start_line
+	if afold.lastline <= g:html_end_line && afold.lastline >= g:html_start_line
 	  " if a fold starts before the range to convert but stops within the
 	  " range, we need to include it. Make it start on the first converted
 	  " line.
@@ -642,6 +660,9 @@ if s:settings.dynamic_folds
 	  " the entire range, don't bother parsing it
 	  call remove(s:allfolds, index(s:allfolds, afold))
 	  let removed = 1
+	  if afold.lastline > g:html_end_line
+	    let leveladjust += 1
+	  endif
 	endif
       elseif afold.firstline > g:html_end_line
 	" If the entire fold lies outside the range we need to remove it.
@@ -664,11 +685,23 @@ if s:settings.dynamic_folds
       endif
     endif
     if !removed
+      let afold.level -= leveladjust
       if afold.level+1 > s:foldcolumn
 	let s:foldcolumn = afold.level+1
       endif
     endif
   endfor
+
+  " if we've removed folds containing the conversion range from processing,
+  " getting foldtext as we go won't know to open the removed folds, so the
+  " foldtext would be wrong; open them now.
+  "
+  " Note that only when a start and an end line is specified will a fold
+  " containing the current range ever be removed.
+  while leveladjust > 0
+    exe g:html_start_line."foldopen"
+    let leveladjust -= 1
+  endwhile
 endif
 
 " Now loop over all lines in the original text to convert to html.
@@ -1048,10 +1081,14 @@ if s:settings.use_css
   if s:settings.no_pre
     execute "normal! A\nbody { color: " . s:fgc . "; background-color: " . s:bgc . "; font-family: ". s:htmlfont ."; }\e"
   else
-    execute "normal! A\npre { font-family: ". s:htmlfont ."; color: " . s:fgc . "; background-color: " . s:bgc . "; }\e"
+    execute "normal! A\npre { " . s:whitespace . "font-family: ". s:htmlfont ."; color: " . s:fgc . "; background-color: " . s:bgc . "; }\e"
     yank
     put
     execute "normal! ^cwbody\e"
+    " body should not have the wrap formatting, only the pre section
+    if s:whitespace != ''
+      exec 's#'.s:whitespace
+    endif
   endif
 else
   execute '%s:<body>:<body bgcolor="' . s:bgc . '" text="' . s:fgc . '">\r<font face="'. s:htmlfont .'">'
@@ -1160,7 +1197,7 @@ let &l:winfixheight = s:old_winfixheight
 let &ls=s:ls
 
 " Save a little bit of memory (worth doing?)
-unlet s:htmlfont
+unlet s:htmlfont s:whitespace
 unlet s:old_et s:old_paste s:old_icon s:old_report s:old_title s:old_search
 unlet s:old_magic s:old_more s:old_fdm s:old_fen s:old_winheight
 unlet! s:old_isprint

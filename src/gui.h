@@ -52,10 +52,6 @@
 # include <SegLoad.h>*/
 #endif
 
-#ifdef RISCOS
-# include "gui_riscos.h"
-#endif
-
 #ifdef FEAT_GUI_PHOTON
 # include <Ph.h>
 # include <Pt.h>
@@ -152,7 +148,7 @@
 #define DRAW_BOLD		0x02	/* draw bold text */
 #define DRAW_UNDERL		0x04	/* draw underline text */
 #define DRAW_UNDERC		0x08	/* draw undercurl text */
-#if defined(RISCOS) || defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
+#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MACVIM)
 # define DRAW_ITALIC		0x10	/* draw italic text */
 #endif
 #define DRAW_CURSOR		0x20	/* drawing block cursor (win32) */
@@ -221,9 +217,6 @@ typedef struct GuiScrollbar
 #endif
 #ifdef FEAT_GUI_MAC
     ControlHandle id;		/* A handle to the scrollbar */
-#endif
-#ifdef RISCOS
-    int		id;		/* Window handle of scrollbar window */
 #endif
 #ifdef FEAT_GUI_PHOTON
     PtWidget_t	*id;
@@ -416,6 +409,8 @@ typedef struct Gui
     GtkAccelGroup *accel_group;
     GtkWidget	*filedlg;	    /* file selection dialog */
     char_u	*browse_fname;	    /* file name from filedlg */
+
+    guint32	event_time;
 #endif	/* FEAT_GUI_GTK */
 
 #if defined(FEAT_GUI_TABLINE) \
@@ -456,14 +451,6 @@ typedef struct Gui
     int		MacOSHelpItems;	    /* Nr of help-items supplied by MacOS */
     WindowPtr	wid;		    /* Window id of text area */
     int		visibility;	    /* Is window partially/fully obscured? */
-#endif
-
-#ifdef RISCOS
-    int		window_handle;
-    char_u	*window_title;
-    int		window_title_size;
-    int		fg_colour;		/* in 0xBBGGRR format */
-    int		bg_colour;
 #endif
 
 #ifdef FEAT_GUI_PHOTON

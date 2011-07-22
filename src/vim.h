@@ -122,7 +122,8 @@
     || defined(FEAT_GUI_W32) \
     || defined(FEAT_GUI_W16) \
     || defined(FEAT_GUI_PHOTON)
-# if !defined(FEAT_GUI)
+# define FEAT_GUI_ENABLED  /* also defined with NO_X11_INCLUDES */
+# if !defined(FEAT_GUI) && !defined(NO_X11_INCLUDES)
 #  define FEAT_GUI
 # endif
 #endif
@@ -184,9 +185,6 @@
 # else
 #  define SIZEOF_INT 2
 # endif
-#endif
-#ifdef RISCOS
-# define SIZEOF_INT 4
 #endif
 
 
@@ -339,10 +337,6 @@
 #  define HAVE_SETENV
 # endif
 # include "os_mac.h"
-#endif
-
-#ifdef RISCOS
-# include "os_riscos.h"
 #endif
 
 #ifdef __QNX__
@@ -788,7 +782,8 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EXPAND_FILETYPE		37
 #define EXPAND_FILES_IN_PATH	38
 #define EXPAND_OWNSYNTAX	39
-#define EXPAND_MACACTION	40
+#define EXPAND_LOCALES		40
+#define EXPAND_MACACTION	41
 
 /* Values for exmode_active (0 is no exmode) */
 #define EXMODE_NORMAL		1
@@ -823,6 +818,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EW_EXEC		0x40	/* executable files */
 #define EW_PATH		0x80	/* search in 'path' too */
 #define EW_ICASE	0x100	/* ignore case */
+#define EW_NOERROR	0x200	/* no error for bad regexp */
 /* Note: mostly EW_NOTFOUND and EW_SILENT are mutually exclusive: EW_NOTFOUND
  * is used when executing commands and EW_SILENT for interactive expanding. */
 
@@ -1284,6 +1280,7 @@ enum auto_event
     EVENT_WINENTER,		/* after entering a window */
     EVENT_WINLEAVE,		/* before leaving a window */
     EVENT_ENCODINGCHANGED,	/* after changing the 'encoding' option */
+    EVENT_INSERTCHARPRE,	/* before inserting a char */
     EVENT_CURSORHOLD,		/* cursor in same position for a while */
     EVENT_CURSORHOLDI,		/* idem, in Insert mode */
     EVENT_FUNCUNDEFINED,	/* if calling a function which doesn't exist */
@@ -2219,5 +2216,11 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 #define KEYLEN_PART_KEY -1	/* keylen value for incomplete key-code */
 #define KEYLEN_PART_MAP -2	/* keylen value for incomplete mapping */
 #define KEYLEN_REMOVED  9999	/* keylen value for removed sequence */
+
+/* Return values from win32_fileinfo(). */
+#define FILEINFO_OK	     0
+#define FILEINFO_ENC_FAIL    1	/* enc_to_utf16() failed */
+#define FILEINFO_READ_FAIL   2	/* CreateFile() failed */
+#define FILEINFO_INFO_FAIL   3	/* GetFileInformationByHandle() failed */
 
 #endif /* VIM__H */

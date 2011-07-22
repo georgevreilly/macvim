@@ -2431,25 +2431,39 @@ do_one_cmd(cmdlinep, sourcing,
     if (       (ea.argt & REGSTR)
 	    && *ea.arg != NUL
 #ifdef FEAT_USR_CMDS
-	    && valid_yank_reg(*ea.arg, (ea.cmdidx != CMD_put
-						   && USER_CMDIDX(ea.cmdidx)))
 	    /* Do not allow register = for user commands */
 	    && (!USER_CMDIDX(ea.cmdidx) || *ea.arg != '=')
-#else
-	    && valid_yank_reg(*ea.arg, ea.cmdidx != CMD_put)
 #endif
 	    && !((ea.argt & COUNT) && VIM_ISDIGIT(*ea.arg)))
     {
-	ea.regname = *ea.arg++;
-#ifdef FEAT_EVAL
-	/* for '=' register: accept the rest of the line as an expression */
-	if (ea.arg[-1] == '=' && ea.arg[0] != NUL)
+#ifndef FEAT_CLIPBOARD
+	/* check these explicitly for a more specific error message */
+	if (*ea.arg == '*' || *ea.arg == '+')
 	{
-	    set_expr_line(vim_strsave(ea.arg));
-	    ea.arg += STRLEN(ea.arg);
+	    errormsg = (char_u *)_(e_invalidreg);
+	    goto doend;
 	}
 #endif
-	ea.arg = skipwhite(ea.arg);
+	if (
+#ifdef FEAT_USR_CMDS
+	    valid_yank_reg(*ea.arg, (ea.cmdidx != CMD_put
+						   && USER_CMDIDX(ea.cmdidx)))
+#else
+	    valid_yank_reg(*ea.arg, ea.cmdidx != CMD_put)
+#endif
+	   )
+	{
+	    ea.regname = *ea.arg++;
+#ifdef FEAT_EVAL
+	    /* for '=' register: accept the rest of the line as an expression */
+	    if (ea.arg[-1] == '=' && ea.arg[0] != NUL)
+	    {
+		set_expr_line(vim_strsave(ea.arg));
+		ea.arg += STRLEN(ea.arg);
+	    }
+#endif
+	    ea.arg = skipwhite(ea.arg);
+	}
     }
 
     /*
@@ -2588,6 +2602,7 @@ do_one_cmd(cmdlinep, sourcing,
 	    case CMD_unlet:
 	    case CMD_verbose:
 	    case CMD_vertical:
+	    case CMD_wincmd:
 				break;
 
 	    default:		goto doend;
@@ -3857,13 +3872,24 @@ set_one_cmd_context(xp, buff)
 #if (defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
 	&& (defined(FEAT_GETTEXT) || defined(FEAT_MBYTE))
 	case CMD_language:
-	    if (*skiptowhite(arg) == NUL)
+	    p = skiptowhite(arg);
+	    if (*p == NUL)
 	    {
 		xp->xp_context = EXPAND_LANGUAGE;
 		xp->xp_pattern = arg;
 	    }
 	    else
-		xp->xp_context = EXPAND_NOTHING;
+	    {
+		if ( STRNCMP(arg, "messages", p - arg) == 0
+		  || STRNCMP(arg, "ctype", p - arg) == 0
+		  || STRNCMP(arg, "time", p - arg) == 0)
+		{
+		    xp->xp_context = EXPAND_LOCALES;
+		    xp->xp_pattern = skipwhite(p);
+		}
+		else
+		    xp->xp_context = EXPAND_NOTHING;
+	    }
 	    break;
 #endif
 #if defined(FEAT_PROFILE)
@@ -5289,7 +5315,9 @@ static struct
 {
     {EXPAND_AUGROUP, "augroup"},
     {EXPAND_BUFFERS, "buffer"},
+    {EXPAND_COLORS, "color"},
     {EXPAND_COMMANDS, "command"},
+    {EXPAND_COMPILER, "compiler"},
 #if defined(FEAT_CSCOPE)
     {EXPAND_CSCOPE, "cscope"},
 #endif
@@ -5302,10 +5330,15 @@ static struct
     {EXPAND_EVENTS, "event"},
     {EXPAND_EXPRESSION, "expression"},
     {EXPAND_FILES, "file"},
+    {EXPAND_FILES_IN_PATH, "file_in_path"},
     {EXPAND_FILETYPE, "filetype"},
     {EXPAND_FUNCTIONS, "function"},
     {EXPAND_HELP, "help"},
     {EXPAND_HIGHLIGHT, "highlight"},
+#if (defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
+        && (defined(FEAT_GETTEXT) || defined(FEAT_MBYTE))
+    {EXPAND_LOCALES, "locale"},
+#endif
     {EXPAND_MAPPINGS, "mapping"},
     {EXPAND_MENUS, "menu"},
     {EXPAND_OWNSYNTAX, "syntax"},
@@ -6476,7 +6509,7 @@ ex_close(eap)
 {
 # ifdef FEAT_CMDWIN
     if (cmdwin_type != 0)
-	cmdwin_result = K_IGNORE;
+	cmdwin_result = Ctrl_C;
     else
 # endif
 	if (!text_locked()
@@ -7062,7 +7095,7 @@ alist_expand(fnum_list, fnum_len)
 	old_arg_count = GARGCOUNT;
 	if (expand_wildcards(old_arg_count, old_arg_files,
 		    &new_arg_file_count, &new_arg_files,
-		    EW_FILE|EW_NOTFOUND|EW_ADDSLASH) == OK
+		    EW_FILE|EW_NOTFOUND|EW_ADDSLASH|EW_NOERROR) == OK
 		&& new_arg_file_count > 0)
 	{
 	    alist_set(&global_alist, new_arg_file_count, new_arg_files,
@@ -8232,7 +8265,7 @@ ex_wincmd(eap)
     p = skipwhite(p);
     if (*p != NUL && *p != '"' && eap->nextcmd == NULL)
 	EMSG(_(e_invarg));
-    else
+    else if (!eap->skip)
     {
 	/* Pass flags on for ":vertical wincmd ]". */
 	postponed_split_flags = cmdmod.split;
@@ -9708,14 +9741,7 @@ eval_vars(src, srcstart, usedlen, lnump, errormsg, escaped)
 		    valid = 0;	    /* Must have ":p:h" to be valid */
 		}
 		else
-#ifdef RISCOS
-		    /* Always use the full path for RISC OS if possible. */
-		    result = curbuf->b_ffname;
-		    if (result == NULL)
-			result = curbuf->b_fname;
-#else
 		    result = curbuf->b_fname;
-#endif
 		break;
 
 	case SPEC_HASH:		/* '#' or "#99": alternate file */
@@ -9860,11 +9886,7 @@ eval_vars(src, srcstart, usedlen, lnump, errormsg, escaped)
 	if (src[*usedlen] == '<')	/* remove the file name extension */
 	{
 	    ++*usedlen;
-#ifdef RISCOS
-	    if ((s = vim_strrchr(result, '/')) != NULL && s >= gettail(result))
-#else
 	    if ((s = vim_strrchr(result, '.')) != NULL && s >= gettail(result))
-#endif
 		resultlen = (int)(s - result);
 	}
 #ifdef FEAT_MODIFY_FNAME
@@ -10889,8 +10911,7 @@ get_view_file(c)
 	    else if (vim_ispathsep(*p))
 	    {
 		*s++ = '=';
-#if defined(BACKSLASH_IN_FILENAME) || defined(AMIGA) || defined(RISCOS) \
-	|| defined(VMS)
+#if defined(BACKSLASH_IN_FILENAME) || defined(AMIGA) || defined(VMS)
 		if (*p == ':')
 		    *s++ = '-';
 		else

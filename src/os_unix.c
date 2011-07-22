@@ -3666,27 +3666,6 @@ mch_new_shellsize()
     /* Nothing to do. */
 }
 
-#ifndef USE_SYSTEM
-static void append_ga_line __ARGS((garray_T *gap));
-
-/*
- * Append the text in "gap" below the cursor line and clear "gap".
- */
-    static void
-append_ga_line(gap)
-    garray_T	*gap;
-{
-    /* Remove trailing CR. */
-    if (gap->ga_len > 0
-	    && !curbuf->b_p_bin
-	    && ((char_u *)gap->ga_data)[gap->ga_len - 1] == CAR)
-	--gap->ga_len;
-    ga_append(gap, NUL);
-    ml_append(curwin->w_cursor.lnum++, gap->ga_data, 0, FALSE);
-    gap->ga_len = 0;
-}
-#endif
-
     int
 mch_call_shell(cmd, options)
     char_u	*cmd;
@@ -3928,11 +3907,20 @@ mch_call_shell(cmd, options)
 	if (p_guipty && !(options & (SHELL_READ|SHELL_WRITE)))
 	{
 	    pty_master_fd = OpenPTY(&tty_name);	    /* open pty */
-	    if (pty_master_fd >= 0 && ((pty_slave_fd =
-				    open(tty_name, O_RDWR | O_EXTRA, 0)) < 0))
+	    if (pty_master_fd >= 0)
 	    {
-		close(pty_master_fd);
-		pty_master_fd = -1;
+#if !defined(MACOS) || defined(USE_CARBONIZED)
+		pty_slave_fd = open(tty_name, O_RDWR | O_EXTRA, 0);
+#else
+		/* Leaving out O_NOCTTY may lead to waitpid() always returning
+		 * 0 on Mac OS X 10.7 thereby causing freezes. */
+		pty_slave_fd = open(tty_name, O_RDWR | O_NOCTTY | O_EXTRA);
+#endif
+		if (pty_slave_fd < 0)
+		{
+		    close(pty_master_fd);
+		    pty_master_fd = -1;
+		}
 	    }
 	}
 	/*

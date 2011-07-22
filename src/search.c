@@ -1555,6 +1555,7 @@ searchc(cap, t_cmd)
     int			col;
     char_u		*p;
     int			len;
+    int			stop = TRUE;
 #ifdef FEAT_MBYTE
     static char_u	bytes[MB_MAXBYTES];
     static int		bytelen = 1;	/* >1 for multi-byte char */
@@ -1589,6 +1590,12 @@ searchc(cap, t_cmd)
 	t_cmd = last_t_cmd;
 	c = lastc;
 	/* For multi-byte re-use last bytes[] and bytelen. */
+
+	/* Force a move of at least one char, so ";" and "," will move the
+	 * cursor, even if the cursor is right in front of char we are looking
+	 * at. */
+	if (vim_strchr(p_cpo, CPO_SCOLON) == NULL && count == 1 && t_cmd)
+	    stop = FALSE;
     }
 
     if (dir == BACKWARD)
@@ -1621,14 +1628,15 @@ searchc(cap, t_cmd)
 		}
 		if (bytelen == 1)
 		{
-		    if (p[col] == c)
+		    if (p[col] == c && stop)
 			break;
 		}
 		else
 		{
-		    if (vim_memcmp(p + col, bytes, bytelen) == 0)
+		    if (vim_memcmp(p + col, bytes, bytelen) == 0 && stop)
 			break;
 		}
+		stop = TRUE;
 	    }
 	}
 	else
@@ -1638,8 +1646,9 @@ searchc(cap, t_cmd)
 	    {
 		if ((col += dir) < 0 || col >= len)
 		    return FAIL;
-		if (p[col] == c)
+		if (p[col] == c && stop)
 		    break;
+		stop = TRUE;
 	    }
 	}
     }
@@ -4590,9 +4599,6 @@ find_pattern_in_path(ptr, dir, len, whole, skip_comments,
     char_u	*already = NULL;
     char_u	*startp = NULL;
     char_u	*inc_opt = NULL;
-#ifdef RISCOS
-    int		previous_munging = __riscosify_control;
-#endif
 #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
     win_T	*curwin_save = NULL;
 #endif
@@ -4604,11 +4610,6 @@ find_pattern_in_path(ptr, dir, len, whole, skip_comments,
     file_line = alloc(LSIZE);
     if (file_line == NULL)
 	return;
-
-#ifdef RISCOS
-    /* UnixLib knows best how to munge c file names - turn munging back on. */
-    int __riscosify_control = 0;
-#endif
 
     if (type != CHECK_PATH && type != FIND_DEFINE
 #ifdef FEAT_INS_EXPAND
@@ -5237,11 +5238,6 @@ fpip_end:
     vim_free(regmatch.regprog);
     vim_free(incl_regmatch.regprog);
     vim_free(def_regmatch.regprog);
-
-#ifdef RISCOS
-   /* Restore previous file munging state. */
-    __riscosify_control = previous_munging;
-#endif
 }
 
     static void
