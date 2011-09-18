@@ -68,9 +68,16 @@
 
 static void init_structs(void);
 
+/* The "surrogateescape" error handler is new in Python 3.1 */
+#if PY_VERSION_HEX >= 0x030100f0
+# define CODEC_ERROR_HANDLER "surrogateescape"
+#else
+# define CODEC_ERROR_HANDLER NULL
+#endif
+
 #define PyInt Py_ssize_t
 #define PyString_Check(obj) PyUnicode_Check(obj)
-#define PyString_AsBytes(obj) PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, NULL);
+#define PyString_AsBytes(obj) PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, CODEC_ERROR_HANDLER);
 #define PyString_FreeBytes(obj) Py_XDECREF(bytes)
 #define PyString_AsString(obj) PyBytes_AsString(obj)
 #define PyString_Size(obj) PyBytes_GET_SIZE(bytes)
@@ -187,7 +194,7 @@ static void (*py3_PyGILState_Release)(PyGILState_STATE);
 static int (*py3_PySys_SetObject)(char *, PyObject *);
 static PyObject* (*py3_PyList_Append)(PyObject *, PyObject *);
 static Py_ssize_t (*py3_PyList_Size)(PyObject *);
-static int (*py3_PySlice_GetIndicesEx)(PySliceObject *r, Py_ssize_t length,
+static int (*py3_PySlice_GetIndicesEx)(PyObject *r, Py_ssize_t length,
 		     Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength);
 static PyObject* (*py3_PyErr_NoMemory)(void);
 static void (*py3_Py_Finalize)(void);
@@ -360,7 +367,8 @@ py3_runtime_link_init(char *libname, int verbose)
      * standard C extension libraries of one or both python versions. */
     if (python_loaded())
     {
-	EMSG(_("E837: This Vim cannot execute :py3 after using :python"));
+	if (verbose)
+	    EMSG(_("E837: This Vim cannot execute :py3 after using :python"));
 	return FAIL;
     }
 # endif
@@ -661,8 +669,9 @@ DoPy3Command(exarg_T *eap, const char *cmd)
 
     /* PyRun_SimpleString expects a UTF-8 string. Wrong encoding may cause
      * SyntaxError (unicode error). */
-    cmdstr = PyUnicode_Decode(cmd, strlen(cmd), (char *)ENC_OPT, NULL);
-    cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", NULL);
+    cmdstr = PyUnicode_Decode(cmd, strlen(cmd),
+					(char *)ENC_OPT, CODEC_ERROR_HANDLER);
+    cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", CODEC_ERROR_HANDLER);
     Py_XDECREF(cmdstr);
     PyRun_SimpleString(PyBytes_AsString(cmdbytes));
     Py_XDECREF(cmdbytes);
@@ -846,8 +855,8 @@ PythonIO_Fini(void)
 
 static Py_ssize_t BufferLength(PyObject *);
 static PyObject *BufferItem(PyObject *, Py_ssize_t);
-static PyObject* BufferSubscript(PyObject *self, PyObject* idx);
-static Py_ssize_t BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val);
+static PyObject* BufferSubscript(PyObject *self, PyObject *idx);
+static Py_ssize_t BufferAsSubscript(PyObject *self, PyObject *idx, PyObject *val);
 
 
 /* Line range type - Implementation functions
@@ -856,8 +865,9 @@ static Py_ssize_t BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val
 
 #define RangeType_Check(obj) ((obj)->ob_base.ob_type == &RangeType)
 
-static PyObject* RangeSubscript(PyObject *self, PyObject* idx);
+static PyObject* RangeSubscript(PyObject *self, PyObject *idx);
 static Py_ssize_t RangeAsItem(PyObject *, Py_ssize_t, PyObject *);
+static Py_ssize_t RangeAsSubscript(PyObject *self, PyObject *idx, PyObject *val);
 
 /* Current objects type - Implementation functions
  * -----------------------------------------------
@@ -1020,13 +1030,13 @@ BufferSubscript(PyObject *self, PyObject* idx)
     } else if (PySlice_Check(idx)) {
 	Py_ssize_t start, stop, step, slicelen;
 
-	if (PySlice_GetIndicesEx((PySliceObject *)idx,
+	if (PySlice_GetIndicesEx((PyObject *)idx,
 	      (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count+1,
 	      &start, &stop,
 	      &step, &slicelen) < 0) {
 	    return NULL;
 	}
-	return BufferSlice(self,start,stop);
+	return BufferSlice(self, start, stop);
     } else {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return NULL;
@@ -1044,7 +1054,7 @@ BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val)
     } else if (PySlice_Check(idx)) {
 	Py_ssize_t start, stop, step, slicelen;
 
-	if (PySlice_GetIndicesEx((PySliceObject *)idx,
+	if (PySlice_GetIndicesEx((PyObject *)idx,
 	      (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count+1,
 	      &start, &stop,
 	      &step, &slicelen) < 0) {
@@ -1075,7 +1085,7 @@ static PySequenceMethods RangeAsSeq = {
 PyMappingMethods RangeAsMapping = {
     /* mp_length	*/ (lenfunc)RangeLength,
     /* mp_subscript     */ (binaryfunc)RangeSubscript,
-    /* mp_ass_subscript */ (objobjargproc)0,
+    /* mp_ass_subscript */ (objobjargproc)RangeAsSubscript,
 };
 
 /* Line range object - Implementation
@@ -1114,6 +1124,15 @@ RangeAsItem(PyObject *self, Py_ssize_t n, PyObject *val)
 		    &((RangeObject *)(self))->end);
 }
 
+    static Py_ssize_t
+RangeAsSlice(PyObject *self, Py_ssize_t lo, Py_ssize_t hi, PyObject *val)
+{
+    return RBAsSlice(((RangeObject *)(self))->buf, lo, hi, val,
+		    ((RangeObject *)(self))->start,
+		    ((RangeObject *)(self))->end,
+		    &((RangeObject *)(self))->end);
+}
+
     static PyObject *
 RangeSubscript(PyObject *self, PyObject* idx)
 {
@@ -1123,18 +1142,41 @@ RangeSubscript(PyObject *self, PyObject* idx)
     } else if (PySlice_Check(idx)) {
 	Py_ssize_t start, stop, step, slicelen;
 
-	if (PySlice_GetIndicesEx((PySliceObject *)idx,
+	if (PySlice_GetIndicesEx((PyObject *)idx,
 		((RangeObject *)(self))->end-((RangeObject *)(self))->start+1,
 		&start, &stop,
 		&step, &slicelen) < 0) {
 	    return NULL;
 	}
-	return RangeSlice(self,start,stop+1);
+	return RangeSlice(self, start, stop);
     } else {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return NULL;
     }
 }
+
+    static Py_ssize_t
+RangeAsSubscript(PyObject *self, PyObject *idx, PyObject *val)
+{
+    if (PyLong_Check(idx)) {
+	long n = PyLong_AsLong(idx);
+	return RangeAsItem(self, n, val);
+    } else if (PySlice_Check(idx)) {
+	Py_ssize_t start, stop, step, slicelen;
+
+	if (PySlice_GetIndicesEx((PyObject *)idx,
+		((RangeObject *)(self))->end-((RangeObject *)(self))->start+1,
+		&start, &stop,
+		&step, &slicelen) < 0) {
+	    return -1;
+	}
+	return RangeAsSlice(self, start, stop, val);
+    } else {
+	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
+	return -1;
+    }
+}
+
 
 /* Buffer list object - Definitions
  */
@@ -1463,7 +1505,7 @@ LineToString(const char *str)
     }
     *p = '\0';
 
-    result = PyUnicode_Decode(tmp, len, (char *)ENC_OPT, NULL);
+    result = PyUnicode_Decode(tmp, len, (char *)ENC_OPT, CODEC_ERROR_HANDLER);
 
     vim_free(tmp);
     return result;

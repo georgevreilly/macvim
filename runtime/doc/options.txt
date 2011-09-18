@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 7.3.  Last change: 2011 Jun 12
+*options.txt*	For Vim version 7.3.  Last change: 2011 Sep 09
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -3308,7 +3308,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	XXX: Think about how 'fullscreen' and 'transparency' should interact. 
 
 						*'fuoptions'* *'fuopt'*
-'fuoptions' 'fuopt'	string (default "maxvert")
+'fuoptions' 'fuopt'	string (default "maxvert,maxhorz")
 			global
 			{not in Vi}
 			{only in MacVim GUI}
@@ -3328,6 +3328,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		number of columns, it is restored to the value it had before
 		entering fullscreen.
 	background:color
+		{not supported in Mac OS X native full screen}
 		When entering fullscreen, 'color' defines the color of the part
 		of the screen that is not occupied by the Vim control. If
 		'color' is an 8-digit hexadecimal number preceded by '#',
@@ -3339,15 +3340,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 		scheme.
 
 	Examples: 
-	Don't change size of Vim when entering fullscreen: >
+	Don't change size when entering fullscreen: >
 	  :set fuoptions=
-<	Maximize Vim when entering fullscreen: >
-	  :set fuoptions=maxvert,maxhorz
-<	Maximize Vim only vertically when entering fullscreen, and color the
+<	Only maximize vertically when entering fullscreen: >
+	  :set fuoptions=maxvert
+<	Maximize only vertically when entering fullscreen, and color the
 	background dark blue: >
 	  :set fuoptions=maxvert,background:#FF003042
-<	Don't change the size of Vim when entering fullscreen, and color the
-	background like the current text background: >
+<	Don't change size when entering fullscreen, and color the background
+	like the current text background: >
 	  :set fuoptions=background:Normal
 <
 	XXX: what if the font size is changed? you probably never want to
@@ -4975,6 +4976,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   written.  A ":set nomodified" command also resets the original
 	   values to the current values and the 'modified' option will be
 	   reset.
+	This option is not set when a change is made to the buffer as the
+	result of a BufNewFile, BufRead/BufReadPost, BufWritePost,
+	FileAppendPost or VimLeave autocommand event.  See |gzip-example| for
+	an explanation.
 	When 'buftype' is "nowrite" or "nofile" this option may be set, but
 	will be ignored.
 
@@ -6012,8 +6017,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	"bash.exe -c ls" or "command.com /c dir".  For the MS-DOS-like
 	systems, the default is set according to the value of 'shell', to
 	reduce the need to set this option by the user.  It's not used for
-	OS/2 (EMX figures this out itself).  See |option-backslash| about
-	including spaces and backslashes.  See |dos-shell|.
+	OS/2 (EMX figures this out itself).
+	On Unix it can have more than one flag.  Each white space separated
+	part is passed as an argument to the shell command.
+	See |option-backslash| about including spaces and backslashes.
+	Also see |dos-shell| for MS-DOS and MS-Windows.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
@@ -6116,7 +6124,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not in Vi}
 	When on, use temp files for shell commands.  When off use a pipe.
 	When using a pipe is not possible temp files are used anyway.
-	Currently a pipe is only supported on Unix.  You can check it with: >
+	Currently a pipe is only supported on Unix and MS-Windows 2K and
+	later.  You can check it with: >
 		:if has("filterpipe")
 <	The advantage of using a pipe is that nobody can read the temp file
 	and the 'shell' command does not need to support redirection.

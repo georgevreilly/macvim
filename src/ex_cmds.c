@@ -1107,7 +1107,7 @@ do_filter(line1, line2, eap, cmd, do_in, do_out)
     if (do_out)
 	shell_flags |= SHELL_DOOUT;
 
-#if !defined(USE_SYSTEM) && defined(UNIX)
+#if (!defined(USE_SYSTEM) && defined(UNIX)) || defined(WIN3264)
     if (!do_in && do_out && !p_stmp)
     {
 	/* Use a pipe to fetch stdout of the command, do not use a temp file. */
@@ -3618,10 +3618,6 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
      * Check if we are editing the w_arg_idx file in the argument list.
      */
     check_arg_idx(curwin);
-
-#ifdef FEAT_SYN_HL
-    reset_synblock(curwin);	    /* remove any ownsyntax */
-#endif
 
 #ifdef FEAT_AUTOCMD
     if (!auto_buf)

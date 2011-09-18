@@ -5814,7 +5814,7 @@ __:
 eof
                     eval "`cd ${PYTHON3_CONFDIR} && make -f "${tmp_mkf}" __ | sed '/ directory /d'`"
           rm -f -- "${tmp_mkf}"
-          vi_cv_path_python3_plibs="-L${PYTHON3_CONFDIR} -lpython${vi_cv_var_python3_version}"
+	  vi_cv_path_python3_plibs="-L${PYTHON3_CONFDIR} -lpython${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags}"
           vi_cv_path_python3_plibs="${vi_cv_path_python3_plibs} ${python3_BASEMODLIBS} ${python3_LIBS} ${python3_SYSLIBS}"
                     vi_cv_path_python3_plibs=`echo $vi_cv_path_python3_plibs | sed s/-ltermcap//`
           vi_cv_path_python3_plibs=`echo $vi_cv_path_python3_plibs | sed s/-lffi//`
@@ -5992,7 +5992,7 @@ echo $ECHO_N "checking whether we can do without RTLD_GLOBAL for Python... $ECHO
   cflags_save=$CFLAGS
   CFLAGS="$CFLAGS $PYTHON_CFLAGS"
   ldflags_save=$LDFLAGS
-  LDFLAGS="$LDFLAGS -ldl"
+    LDFLAGS="-ldl $LDFLAGS"
   if test "$cross_compiling" = yes; then
   { { echo "$as_me:$LINENO: error: cannot run test program while cross compiling
 See \`config.log' for more details." >&5
@@ -6083,7 +6083,7 @@ echo $ECHO_N "checking whether we can do without RTLD_GLOBAL for Python3... $ECH
   cflags_save=$CFLAGS
   CFLAGS="$CFLAGS $PYTHON3_CFLAGS"
   ldflags_save=$LDFLAGS
-  LDFLAGS="$LDFLAGS -ldl"
+    LDFLAGS="-ldl $LDFLAGS"
   if test "$cross_compiling" = yes; then
   { { echo "$as_me:$LINENO: error: cannot run test program while cross compiling
 See \`config.log' for more details." >&5
@@ -20625,7 +20625,7 @@ do
     cat >>$CONFIG_STATUS <<_ACEOF
     # First, check the format of the line:
     cat >"\$tmp/defines.sed" <<\\CEOF
-/^[	 ]*#[	 ]*undef[	 ][	 ]*$ac_word_re[	 ]*\$/b def
+/^[	 ]*#[	 ]*undef[	 ][	 ]*$ac_word_re[	 ]*/b def
 /^[	 ]*#[	 ]*define[	 ][	 ]*$ac_word_re[(	 ]/b def
 b
 :def

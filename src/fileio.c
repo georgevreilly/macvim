@@ -3342,8 +3342,22 @@ buf_write(buf, fname, sfname, start, end, eap, append, forceit,
 	}
 	else if (reset_changed && whole)
 	{
-	    if (!(did_cmd = apply_autocmds_exarg(EVENT_BUFWRITECMD,
-					 sfname, sfname, FALSE, curbuf, eap)))
+	    int was_changed = curbufIsChanged();
+
+	    did_cmd = apply_autocmds_exarg(EVENT_BUFWRITECMD,
+					  sfname, sfname, FALSE, curbuf, eap);
+	    if (did_cmd)
+	    {
+		if (was_changed && !curbufIsChanged())
+		{
+		    /* Written everything correctly and BufWriteCmd has reset
+		     * 'modified': Correct the undo information so that an
+		     * undo now sets 'modified'. */
+		    u_unchanged(curbuf);
+		    u_update_save_nr(curbuf);
+		}
+	    }
+	    else
 	    {
 #ifdef FEAT_QUICKFIX
 		if (overwriting && bt_nofile(curbuf))
@@ -9082,7 +9096,10 @@ trigger_cursorhold()
 {
     int		state;
 
-    if (!did_cursorhold && has_cursorhold() && !Recording
+    if (!did_cursorhold
+	    && has_cursorhold()
+	    && !Recording
+	    && typebuf.tb_len == 0
 #ifdef FEAT_INS_EXPAND
 	    && !ins_compl_active()
 #endif
@@ -9973,6 +9990,8 @@ match_file_pat(pattern, prog, fname, sfname, tail, allow_dirs)
 	    if ((c == ';' || c == '>') && match == FALSE)
 	    {
 		*pattern = NUL;	    /* Terminate the string */
+		/* TODO: match with 'filetype' of buffer that "fname" comes
+		 * from. */
 		match = mch_check_filetype(fname, type_start);
 		*pattern = c;	    /* Restore the terminator */
 		type_start = pattern + 1;
