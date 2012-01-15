@@ -418,12 +418,12 @@ typeahead_noflush(c)
 
 /*
  * Remove the contents of the stuff buffer and the mapped characters in the
- * typeahead buffer (used in case of an error).  If 'typeahead' is true,
+ * typeahead buffer (used in case of an error).  If "flush_typeahead" is true,
  * flush all typeahead characters (used when interrupted by a CTRL-C).
  */
     void
-flush_buffers(typeahead)
-    int typeahead;
+flush_buffers(flush_typeahead)
+    int flush_typeahead;
 {
     init_typebuf();
 
@@ -431,7 +431,7 @@ flush_buffers(typeahead)
     while (read_stuff(TRUE) != NUL)
 	;
 
-    if (typeahead)	    /* remove all typeahead */
+    if (flush_typeahead)	    /* remove all typeahead */
     {
 	/*
 	 * We have to get all characters, because we may delete the first part
@@ -2460,27 +2460,18 @@ vgetorpeek(advance)
 
 			/*
 			 * Handle ":map <expr>": evaluate the {rhs} as an
-			 * expression.  Save and restore the typeahead so that
-			 * getchar() can be used.  Also save and restore the
-			 * command line for "normal :".
+			 * expression.  Also save and restore the command line
+			 * for "normal :".
 			 */
 			if (mp->m_expr)
 			{
-			    tasave_T	tabuf;
 			    int		save_vgetc_busy = vgetc_busy;
 
-			    save_typeahead(&tabuf);
-			    if (tabuf.typebuf_valid)
-			    {
-				vgetc_busy = 0;
-				save_m_keys = vim_strsave(mp->m_keys);
-				save_m_str = vim_strsave(mp->m_str);
-				s = eval_map_expr(save_m_str, NUL);
-				vgetc_busy = save_vgetc_busy;
-			    }
-			    else
-				s = NULL;
-			    restore_typeahead(&tabuf);
+			    vgetc_busy = 0;
+			    save_m_keys = vim_strsave(mp->m_keys);
+			    save_m_str = vim_strsave(mp->m_str);
+			    s = eval_map_expr(save_m_str, NUL);
+			    vgetc_busy = save_vgetc_busy;
 			}
 			else
 #endif
@@ -4519,6 +4510,8 @@ eval_map_expr(str, c)
     char_u	*expr;
     char_u	*save_cmd;
     pos_T	save_cursor;
+    int		save_msg_col;
+    int		save_msg_row;
 
     /* Remove escaping of CSI, because "str" is in a format to be used as
      * typeahead. */
@@ -4542,12 +4535,16 @@ eval_map_expr(str, c)
 #endif
     set_vim_var_char(c);  /* set v:char to the typed character */
     save_cursor = curwin->w_cursor;
+    save_msg_col = msg_col;
+    save_msg_row = msg_row;
     p = eval_to_string(expr, NULL, FALSE);
     --textlock;
 #ifdef FEAT_EX_EXTRA
     --ex_normal_lock;
 #endif
     curwin->w_cursor = save_cursor;
+    msg_col = save_msg_col;
+    msg_row = save_msg_row;
 
     restore_cmdline_alloc(save_cmd);
     vim_free(expr);

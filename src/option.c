@@ -4633,6 +4633,31 @@ do_set(arg, opt_flags)
 				arg = errbuf;
 			    }
 			    /*
+			     * Convert 'backspace' number to string, for
+			     * adding, prepending and removing string.
+			     */
+			    else if (varp == (char_u *)&p_bs
+					 && VIM_ISDIGIT(**(char_u **)varp))
+			    {
+				i = getdigits((char_u **)varp);
+				switch (i)
+				{
+				    case 0:
+					*(char_u **)varp = empty_option;
+					break;
+				    case 1:
+					*(char_u **)varp = vim_strsave(
+						      (char_u *)"indent,eol");
+					break;
+				    case 2:
+					*(char_u **)varp = vim_strsave(
+						(char_u *)"indent,eol,start");
+					break;
+				}
+				vim_free(oldval);
+				oldval = *(char_u **)varp;
+			    }
+			    /*
 			     * Convert 'whichwrap' number to string, for
 			     * backwards compatibility with Vim 3.0.
 			     * Misuse errbuf[] for the resulting string.
@@ -7576,6 +7601,30 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 	compatible_set();
     }
 
+#ifdef FEAT_PERSISTENT_UNDO
+    /* 'undofile' */
+    else if ((int *)varp == &curbuf->b_p_udf || (int *)varp == &p_udf)
+    {
+	char_u	hash[UNDO_HASH_SIZE];
+	buf_T	*save_curbuf = curbuf;
+
+	for (curbuf = firstbuf; curbuf != NULL; curbuf = curbuf->b_next)
+	{
+	    /* When 'undofile' is set globally: for every buffer, otherwise
+	     * only for the current buffer: Try to read in the undofile, if
+	     * one exists and the buffer wasn't changed. */
+	    if ((curbuf == save_curbuf
+				|| (opt_flags & OPT_GLOBAL) || opt_flags == 0)
+		    && !curbufIsChanged())
+	    {
+		u_compute_hash(hash);
+		u_read_undo(NULL, hash, curbuf->b_fname);
+	    }
+	}
+	curbuf = save_curbuf;
+    }
+#endif
+
     /* 'list', 'number' */
     else if ((int *)varp == &curwin->w_p_list
 	  || (int *)varp == &curwin->w_p_nu
@@ -7890,9 +7939,9 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 #ifdef FEAT_BEVAL
     else if ((int *)varp == &p_beval)
     {
-	if (p_beval == TRUE)
+	if (p_beval && !old_value)
 	    gui_mch_enable_beval_area(balloonEval);
-	else
+	else if (!p_beval && old_value)
 	    gui_mch_disable_beval_area(balloonEval);
     }
 #endif
@@ -7925,6 +7974,10 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 	/* Only de-activate it here, it will be enabled when changing mode. */
 	if (p_imdisable)
 	    im_set_active(FALSE);
+	else if (State & INSERT)
+	    /* When the option is set from an autocommand, it may need to take
+	     * effect right away. */
+	    im_set_active(curbuf->b_p_iminsert == B_IMODE_IM);
 #ifdef FEAT_GUI_MACVIM
 	im_set_control(!p_imdisable);
 #endif
@@ -8667,8 +8720,8 @@ check_redraw(flags)
     long_u	flags;
 {
     /* Careful: P_RCLR and P_RALL are a combination of other P_ flags */
-    int		clear = (flags & P_RCLR) == P_RCLR;
-    int		all = ((flags & P_RALL) == P_RALL || clear);
+    int		doclear = (flags & P_RCLR) == P_RCLR;
+    int		all = ((flags & P_RALL) == P_RALL || doclear);
 
 #ifdef FEAT_WINDOWS
     if ((flags & P_RSTAT) || all)	/* mark all status lines dirty */
@@ -8679,7 +8732,7 @@ check_redraw(flags)
 	changed_window_setting();
     if (flags & P_RBUF)
 	redraw_curbuf_later(NOT_VALID);
-    if (clear)
+    if (doclear)
 	redraw_all_later(CLEAR);
     else if (all)
 	redraw_all_later(NOT_VALID);

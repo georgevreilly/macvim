@@ -1,12 +1,15 @@
 " Vim syntax file
 " Language:	C
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2011 Sep 07
+" Last Change:	2012 Jan 04
 
 " Quit when a (custom) syntax file was already loaded
 if exists("b:current_syntax")
   finish
 endif
+
+let s:cpo_save = &cpo
+set cpo&vim
 
 " A bunch of useful C keywords
 syn keyword	cStatement	goto break return continue asm
@@ -178,7 +181,7 @@ if !exists("c_no_ansi") || exists("c_ansi_typedefs")
   syn keyword   cType		mbstate_t wctrans_t wint_t wctype_t
 endif
 if !exists("c_no_c99") " ISO C99
-  syn keyword	cType		bool complex
+  syn keyword	cType		_Bool bool _Complex complex _Imaginary imaginary
   syn keyword	cType		int8_t int16_t int32_t int64_t
   syn keyword	cType		uint8_t uint16_t uint32_t uint64_t
   syn keyword	cType		int_least8_t int_least16_t int_least32_t int_least64_t
@@ -199,6 +202,15 @@ if exists("c_gnu")
 endif
 if !exists("c_no_c99")
   syn keyword	cStorageClass	inline restrict
+endif
+if !exists("c_no_c11")
+  syn keyword	cStorageClass	_Alignas alignas
+  syn keyword	cOperator	_Alignof alignof
+  syn keyword	cStorageClass	_Atomic
+  syn keyword	cOperator	_Generic
+  syn keyword	cStorageClass	_Noreturn noreturn
+  syn keyword	cOperator	_Static_assert static_assert
+  syn keyword	cStorageClass	_Thread_local thread_local
 endif
 
 if !exists("c_no_ansi") || exists("c_ansi_constants") || exists("c_gnu")
@@ -390,4 +402,6 @@ hi def link cCppOut		Comment
 
 let b:current_syntax = "c"
 
+let &cpo = s:cpo_save
+unlet s:cpo_save
 " vim: ts=8

@@ -1,12 +1,15 @@
 " Vim syntax file
 " Language:	Vim help file
 " Maintainer:	Bram Moolenaar (Bram@vim.org)
-" Last Change:	2011 Jul 11
+" Last Change:	2012 Jan 08
 
 " Quit when a (custom) syntax file was already loaded
 if exists("b:current_syntax")
   finish
 endif
+
+let s:cpo_save = &cpo
+set cpo&vim
 
 syn match helpHeadline		"^[-A-Z .][-A-Z0-9 .()]*[ \t]\+\*"me=e-1
 syn match helpSectionDelim	"^=\{3,}.*===$"
@@ -29,6 +32,7 @@ else
   syn match helpStar		contained "\*"
 endif
 syn match helpNormal		"|.*====*|"
+syn match helpNormal		"|||"
 syn match helpNormal		":|vim:|"	" for :help modeline
 syn match helpVim		"Vim version [0-9.a-z]\+"
 syn match helpVim		"VIM REFERENCE.*"
@@ -195,4 +199,6 @@ hi def link helpURL		String
 
 let b:current_syntax = "help"
 
+let &cpo = s:cpo_save
+unlet s:cpo_save
 " vim: ts=8 sw=2

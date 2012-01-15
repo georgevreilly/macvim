@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2011 Sep 07
+" Last Change:	2012 Jan 04
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -566,7 +566,10 @@ au BufNewFile,BufRead *.d			call s:DtraceCheck()
 
 func! s:DtraceCheck()
   let lines = getline(1, min([line("$"), 100]))
-  if match(lines, '^#!\S\+dtrace\|#pragma\s\+D\s\+option\|:\S\{-}:\S\{-}:') > -1
+  if match(lines, '^module\>\|^import\>') > -1
+    " D files often start with a module and/or import statement.
+    setf d
+  elseif match(lines, '^#!\S\+dtrace\|#pragma\s\+D\s\+option\|:\S\{-}:\S\{-}:') > -1
     setf dtrace
   else
     setf d
@@ -753,6 +756,11 @@ au BufNewFile,BufRead */usr/**/gnupg/options.skel setf gpg
 
 " gnash(1) configuration files
 au BufNewFile,BufRead gnashrc,.gnashrc,gnashpluginrc,.gnashpluginrc setf gnash
+
+" Gitolite
+au BufNewFile,BufRead gitolite.conf		setf gitolite
+au BufNewFile,BufRead */gitolite-admin/conf/*	call s:StarSetf('gitolite')
+au BufNewFile,BufRead {,.}gitolite.rc,example.gitolite.rc 	setf perl
 
 " Gnuplot scripts
 au BufNewFile,BufRead *.gpi			setf gnuplot
@@ -1208,6 +1216,9 @@ au BufNewFile,BufRead *.NS[ACGLMNPS]		setf natural
 
 " Netrc
 au BufNewFile,BufRead .netrc			setf netrc
+
+" Ninja file
+au BufNewFile,BufRead *.ninja			setf ninja
 
 " Novell netware batch files
 au BufNewFile,BufRead *.ncf			setf ncf
@@ -2524,6 +2535,10 @@ au BufNewFile,BufRead */etc/yum.repos.d/* 	call s:StarSetf('dosini')
 " Z-Shell script
 au BufNewFile,BufRead zsh*,zlog*		call s:StarSetf('zsh')
 
+
+" Plain text files, needs to be far down to not override others.  This avoids
+" the "conf" type being used if there is a line starting with '#'.
+au BufNewFile,BufRead *.txt,*.text		setf text
 
 
 " Use the filetype detect plugins.  They may overrule any of the previously
