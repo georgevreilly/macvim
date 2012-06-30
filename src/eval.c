@@ -622,6 +622,9 @@ static void f_localtime __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_log __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_log10 __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
+#ifdef FEAT_LUA
+static void f_luaeval __ARGS((typval_T *argvars, typval_T *rettv));
+#endif
 static void f_map __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_maparg __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_mapcheck __ARGS((typval_T *argvars, typval_T *rettv));
@@ -877,6 +880,7 @@ eval_init()
 	    hash_add(&compat_hashtab, p->vv_di.di_key);
     }
     set_vim_var_nr(VV_SEARCHFORWARD, 1L);
+    set_reg_var(0);  /* default for v:register is not 0 but '"' */
 
 #ifdef EBCDIC
     /*
@@ -6778,6 +6782,10 @@ garbage_collect()
     /* v: vars */
     set_ref_in_ht(&vimvarht, copyID);
 
+#ifdef FEAT_LUA
+    set_ref_in_lua(copyID);
+#endif
+
     /*
      * 2. Free lists and dictionaries that are not referenced.
      */
@@ -7853,7 +7861,7 @@ static struct fst
 #ifdef FEAT_FLOAT
     {"exp",		1, 1, f_exp},
 #endif
-    {"expand",		1, 2, f_expand},
+    {"expand",		1, 3, f_expand},
     {"extend",		2, 3, f_extend},
     {"feedkeys",	1, 2, f_feedkeys},
     {"file_readable",	1, 1, f_filereadable},	/* obsolete */
@@ -7904,7 +7912,7 @@ static struct fst
     {"getwinposx",	0, 0, f_getwinposx},
     {"getwinposy",	0, 0, f_getwinposy},
     {"getwinvar",	2, 2, f_getwinvar},
-    {"glob",		1, 2, f_glob},
+    {"glob",		1, 3, f_glob},
     {"globpath",	2, 3, f_globpath},
     {"has",		1, 1, f_has},
     {"has_key",		2, 2, f_has_key},
@@ -7946,6 +7954,9 @@ static struct fst
 #ifdef FEAT_FLOAT
     {"log",		1, 1, f_log},
     {"log10",		1, 1, f_log10},
+#endif
+#ifdef FEAT_LUA
+    {"luaeval",         1, 2, f_luaeval},
 #endif
     {"map",		2, 2, f_map},
     {"maparg",		1, 4, f_maparg},
@@ -10020,14 +10031,33 @@ f_expand(argvars, rettv)
     int		options = WILD_SILENT|WILD_USE_NL|WILD_LIST_NOTFOUND;
     expand_T	xpc;
     int		error = FALSE;
+    char_u	*result;
 
     rettv->v_type = VAR_STRING;
+    if (argvars[1].v_type != VAR_UNKNOWN
+	    && argvars[2].v_type != VAR_UNKNOWN
+	    && get_tv_number_chk(&argvars[2], &error)
+	    && !error)
+    {
+	rettv->v_type = VAR_LIST;
+	rettv->vval.v_list = NULL;
+    }
+
     s = get_tv_string(&argvars[0]);
     if (*s == '%' || *s == '#' || *s == '<')
     {
 	++emsg_off;
-	rettv->vval.v_string = eval_vars(s, s, &len, NULL, &errormsg, NULL);
+	result = eval_vars(s, s, &len, NULL, &errormsg, NULL);
 	--emsg_off;
+	if (rettv->v_type == VAR_LIST)
+	{
+	    if (rettv_list_alloc(rettv) != FAIL && result != NULL)
+		list_append_string(rettv->vval.v_list, result, -1);
+	    else
+		vim_free(result);
+	}
+	else
+	    rettv->vval.v_string = result;
     }
     else
     {
@@ -10042,7 +10072,18 @@ f_expand(argvars, rettv)
 	    xpc.xp_context = EXPAND_FILES;
 	    if (p_wic)
 		options += WILD_ICASE;
-	    rettv->vval.v_string = ExpandOne(&xpc, s, NULL, options, WILD_ALL);
+	    if (rettv->v_type == VAR_STRING)
+		rettv->vval.v_string = ExpandOne(&xpc, s, NULL,
+							   options, WILD_ALL);
+	    else if (rettv_list_alloc(rettv) != FAIL)
+	    {
+		int i;
+
+		ExpandOne(&xpc, s, NULL, options, WILD_ALL_KEEP);
+		for (i = 0; i < xpc.xp_numfiles; i++)
+		    list_append_string(rettv->vval.v_list, xpc.xp_files[i], -1);
+		ExpandCleanup(&xpc);
+	    }
 	}
 	else
 	    rettv->vval.v_string = NULL;
@@ -10151,7 +10192,7 @@ f_extend(argvars, rettv)
 			EMSG2(_("E737: Key already exists: %s"), hi2->hi_key);
 			break;
 		    }
-		    else if (*action == 'f')
+		    else if (*action == 'f' && HI2DI(hi2) != di1)
 		    {
 			clear_tv(&di1->di_tv);
 			copy_tv(&HI2DI(hi2)->di_tv, &di1->di_tv);
@@ -11841,19 +11882,39 @@ f_glob(argvars, rettv)
     int		error = FALSE;
 
     /* When the optional second argument is non-zero, don't remove matches
-    * for 'wildignore' and don't put matches for 'suffixes' at the end. */
-    if (argvars[1].v_type != VAR_UNKNOWN
-				&& get_tv_number_chk(&argvars[1], &error))
-	options |= WILD_KEEP_ALL;
+     * for 'wildignore' and don't put matches for 'suffixes' at the end. */
     rettv->v_type = VAR_STRING;
+    if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	if (get_tv_number_chk(&argvars[1], &error))
+	    options |= WILD_KEEP_ALL;
+	if (argvars[2].v_type != VAR_UNKNOWN
+				    && get_tv_number_chk(&argvars[2], &error))
+	{
+	    rettv->v_type = VAR_LIST;
+	    rettv->vval.v_list = NULL;
+	}
+    }
     if (!error)
     {
 	ExpandInit(&xpc);
 	xpc.xp_context = EXPAND_FILES;
 	if (p_wic)
 	    options += WILD_ICASE;
-	rettv->vval.v_string = ExpandOne(&xpc, get_tv_string(&argvars[0]),
+	if (rettv->v_type == VAR_STRING)
+	    rettv->vval.v_string = ExpandOne(&xpc, get_tv_string(&argvars[0]),
 						     NULL, options, WILD_ALL);
+	else if (rettv_list_alloc(rettv) != FAIL)
+	{
+	  int i;
+
+	  ExpandOne(&xpc, get_tv_string(&argvars[0]),
+						NULL, options, WILD_ALL_KEEP);
+	  for (i = 0; i < xpc.xp_numfiles; i++)
+	      list_append_string(rettv->vval.v_list, xpc.xp_files[i], -1);
+
+	  ExpandCleanup(&xpc);
+	}
     }
     else
 	rettv->vval.v_string = NULL;
@@ -12038,7 +12099,7 @@ f_has(argvars, rettv)
 #ifdef FEAT_SEARCHPATH
 	"file_in_path",
 #endif
-#if (defined(UNIX) && !defined(USE_SYSTEM)) || defined(WIN3264)
+#ifdef FEAT_FILTERPIPE
 	"filterpipe",
 #endif
 #ifdef FEAT_FIND_ID
@@ -13596,6 +13657,23 @@ f_log10(argvars, rettv)
 }
 #endif
 
+#ifdef FEAT_LUA
+/*
+ * "luaeval()" function
+ */
+    static void
+f_luaeval(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    char_u	*str;
+    char_u	buf[NUMBUFLEN];
+
+    str = get_tv_string_buf(&argvars[0], buf);
+    do_luaeval(str, argvars + 1, rettv);
+}
+#endif
+
 /*
  * "map()" function
  */
@@ -14585,7 +14663,9 @@ f_readfile(argvars, rettv)
 		    long growmin  = (long)((p - start) * 2 + prevlen);
 		    prevsize = grow50pc > growmin ? grow50pc : growmin;
 		}
-		if ((newprev = vim_realloc(prev, prevsize)) == NULL)
+		newprev = prev == NULL ? alloc(prevsize)
+						: vim_realloc(prev, prevsize);
+		if (newprev == NULL)
 		{
 		    do_outofmem_msg((long_u)prevsize);
 		    failed = TRUE;
@@ -18209,11 +18289,21 @@ f_undofile(argvars, rettv)
     rettv->v_type = VAR_STRING;
 #ifdef FEAT_PERSISTENT_UNDO
     {
-	char_u *ffname = FullName_save(get_tv_string(&argvars[0]), FALSE);
+	char_u *fname = get_tv_string(&argvars[0]);
 
-	if (ffname != NULL)
-	    rettv->vval.v_string = u_get_undo_file_name(ffname, FALSE);
-	vim_free(ffname);
+	if (*fname == NUL)
+	{
+	    /* If there is no file name there will be no undo file. */
+	    rettv->vval.v_string = NULL;
+	}
+	else
+	{
+	    char_u *ffname = FullName_save(fname, FALSE);
+
+	    if (ffname != NULL)
+		rettv->vval.v_string = u_get_undo_file_name(ffname, FALSE);
+	    vim_free(ffname);
+	}
     }
 #else
     rettv->vval.v_string = NULL;
@@ -20470,7 +20560,13 @@ ex_echo(eap)
 		/* Call msg_start() after eval1(), evaluating the expression
 		 * may cause a message to appear. */
 		if (eap->cmdidx == CMD_echo)
+		{
+		    /* Mark the saved text as finishing the line, so that what
+		     * follows is displayed on a new line when scrolling back
+		     * at the more prompt. */
+		    msg_sb_eol();
 		    msg_start();
+		}
 	    }
 	    else if (eap->cmdidx == CMD_echo)
 		msg_puts_attr((char_u *)" ", echo_attr);
@@ -22949,6 +23045,7 @@ read_viminfo_varlist(virp, writing)
 		    {
 			vim_free(tv.vval.v_string);
 			tv = *etv;
+			vim_free(etv);
 		    }
 		}
 

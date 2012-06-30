@@ -1720,9 +1720,14 @@ op_delete(oap)
 		did_yank = TRUE;
 	}
 
-	/* Yank into small delete register when no register specified and the
-	 * delete is within one line. */
-	if (oap->regname == 0 && oap->motion_type != MLINE
+	/* Yank into small delete register when no named register specified
+	 * and the delete is within one line. */
+	if ((
+#ifdef FEAT_CLIPBOARD
+            ((clip_unnamed & CLIP_UNNAMED) && oap->regname == '*') ||
+            ((clip_unnamed & CLIP_UNNAMED_PLUS) && oap->regname == '+') ||
+#endif
+	    oap->regname == 0) && oap->motion_type != MLINE
 						      && oap->line_count == 1)
 	{
 	    oap->regname = '-';
@@ -1956,6 +1961,9 @@ op_delete(oap)
 	    curpos = curwin->w_cursor;	/* remember curwin->w_cursor */
 	    ++curwin->w_cursor.lnum;
 	    del_lines((long)(oap->line_count - 2), FALSE);
+
+	    if (delete_last_line)
+		oap->end.lnum = curbuf->b_ml.ml_line_count;
 
 	    n = (oap->end.col + 1 - !oap->inclusive);
 	    if (oap->inclusive && delete_last_line
@@ -2599,7 +2607,8 @@ op_insert(oap, count1)
 	firstline = ml_get(oap->start.lnum) + bd.textcol;
 	if (oap->op_type == OP_APPEND)
 	    firstline += bd.textlen;
-	if ((ins_len = (long)STRLEN(firstline) - pre_textlen) > 0)
+	if (pre_textlen >= 0
+		     && (ins_len = (long)STRLEN(firstline) - pre_textlen) > 0)
 	{
 	    ins_text = vim_strnsave(firstline, (int)ins_len);
 	    if (ins_text != NULL)
@@ -3033,6 +3042,8 @@ op_yank(oap, deleting, mess)
 			}
 #endif
 		    }
+		    if (endcol == MAXCOL)
+			endcol = (colnr_T)STRLEN(p);
 		    if (startcol > endcol
 #ifdef FEAT_VIRTUALEDIT
 			    || is_oneChar
@@ -3041,8 +3052,6 @@ op_yank(oap, deleting, mess)
 			bd.textlen = 0;
 		    else
 		    {
-			if (endcol == MAXCOL)
-			    endcol = (colnr_T)STRLEN(p);
 			bd.textlen = endcol - startcol + oap->inclusive;
 		    }
 		    bd.textstart = p + startcol;

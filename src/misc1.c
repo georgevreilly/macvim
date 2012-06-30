@@ -4139,17 +4139,6 @@ vim_getenv(name, mustfree)
 	{
 	    vim_setenv((char_u *)"VIMRUNTIME", p);
 	    didset_vimruntime = TRUE;
-#ifdef FEAT_GETTEXT
-	    {
-		char_u	*buf = concat_str(p, (char_u *)"/lang");
-
-		if (buf != NULL)
-		{
-		    bindtextdomain(VIMPACKAGE, (char *)buf);
-		    vim_free(buf);
-		}
-	    }
-#endif
 	}
 	else
 	{
@@ -4225,6 +4214,22 @@ vim_setenv(name, val)
     {
 	sprintf((char *)envbuf, "%s=%s", name, val);
 	putenv((char *)envbuf);
+    }
+#endif
+#ifdef FEAT_GETTEXT
+    /*
+     * When setting $VIMRUNTIME adjust the directory to find message
+     * translations to $VIMRUNTIME/lang.
+     */
+    if (*val != NUL && STRICMP(name, "VIMRUNTIME") == 0)
+    {
+	char_u	*buf = concat_str(val, (char_u *)"/lang");
+
+	if (buf != NULL)
+	{
+	    bindtextdomain(VIMPACKAGE, (char *)buf);
+	    vim_free(buf);
+	}
     }
 #endif
 }
@@ -4973,6 +4978,7 @@ static int	cin_isif __ARGS((char_u *));
 static int	cin_iselse __ARGS((char_u *));
 static int	cin_isdo __ARGS((char_u *));
 static int	cin_iswhileofdo __ARGS((char_u *, linenr_T, int));
+static int	cin_is_if_for_while_before_offset __ARGS((char_u *line, int *poffset));
 static int	cin_iswhileofdo_end __ARGS((int terminated, int	ind_maxparen, int ind_maxcomment));
 static int	cin_isbreak __ARGS((char_u *));
 static int	cin_is_cpp_baseclass __ARGS((colnr_T *col));
@@ -5772,6 +5778,52 @@ cin_iswhileofdo(p, lnum, ind_maxparen)	    /* XXX */
 }
 
 /*
+ * Check whether in "p" there is an "if", "for" or "while" before "*poffset".
+ * Return 0 if there is none.
+ * Otherwise return !0 and update "*poffset" to point to the place where the
+ * string was found.
+ */
+    static int
+cin_is_if_for_while_before_offset(line, poffset)
+    char_u *line;
+    int    *poffset;
+{
+    int offset = *poffset;
+
+    if (offset-- < 2)
+	return 0;
+    while (offset > 2 && vim_iswhite(line[offset]))
+	--offset;
+
+    offset -= 1;
+    if (!STRNCMP(line + offset, "if", 2))
+	goto probablyFound;
+
+    if (offset >= 1)
+    {
+	offset -= 1;
+	if (!STRNCMP(line + offset, "for", 3))
+	    goto probablyFound;
+
+	if (offset >= 2)
+	{
+	    offset -= 2;
+	    if (!STRNCMP(line + offset, "while", 5))
+		goto probablyFound;
+	}
+    }
+    return 0;
+
+probablyFound:
+    if (!offset || !vim_isIDc(line[offset - 1]))
+    {
+	*poffset = offset;
+	return 1;
+    }
+    return 0;
+}
+
+/*
  * Return TRUE if we are at the end of a do-while.
  *    do
  *       nothing;
@@ -6125,7 +6177,7 @@ find_start_brace(ind_maxcomment)	    /* XXX */
 
 /*
  * Find the matching '(', failing if it is in a comment.
- * Return NULL of no match found.
+ * Return NULL if no match found.
  */
     static pos_T *
 find_match_paren(ind_maxparen, ind_maxcomment)	    /* XXX */
@@ -6394,6 +6446,12 @@ get_c_indent()
      */
     int ind_cpp_namespace = 0;
 
+    /*
+     * handle continuation lines containing conditions of if(), for() and
+     * while()
+     */
+    int ind_if_for_while = 0;
+
     pos_T	cur_curpos;
     int		amount;
     int		scope_amount;
@@ -6510,6 +6568,7 @@ get_c_indent()
 	    case 'l': ind_keep_case_label = n; break;
 	    case '#': ind_hash_comment = n; break;
 	    case 'N': ind_cpp_namespace = n; break;
+	    case 'k': ind_if_for_while = n; break;
 	}
 	if (*options == ',')
 	    ++options;
@@ -6813,6 +6872,33 @@ get_c_indent()
 	if (amount == -1)
 	{
 	    int	    ignore_paren_col = 0;
+	    int	    is_if_for_while = 0;
+
+	    if (ind_if_for_while)
+	    {
+		/* Look for the outermost opening parenthesis on this line
+		 * and check whether it belongs to an "if", "for" or "while". */
+
+		pos_T	    cursor_save = curwin->w_cursor;
+		pos_T	    outermost;
+		char_u	    *line;
+
+		trypos = &our_paren_pos;
+		do {
+		    outermost = *trypos;
+		    curwin->w_cursor.lnum = outermost.lnum;
+		    curwin->w_cursor.col = outermost.col;
+
+		    trypos = find_match_paren(ind_maxparen, ind_maxcomment);
+		} while (trypos && trypos->lnum == outermost.lnum);
+
+		curwin->w_cursor = cursor_save;
+
+		line = ml_get(outermost.lnum);
+
+		is_if_for_while =
+		    cin_is_if_for_while_before_offset(line, &outermost.col);
+	    }
 
 	    amount = skip_label(our_paren_pos.lnum, &look, ind_maxcomment);
 	    look = skipwhite(look);
@@ -6837,7 +6923,7 @@ get_c_indent()
 		curwin->w_cursor.lnum = save_lnum;
 		look = ml_get(our_paren_pos.lnum) + look_col;
 	    }
-	    if (theline[0] == ')' || ind_unclosed == 0
+	    if (theline[0] == ')' || (ind_unclosed == 0 && is_if_for_while == 0)
 		    || (!ind_unclosed_noignore && *look == '('
 						    && ignore_paren_col == 0))
 	    {
@@ -6908,7 +6994,8 @@ get_c_indent()
 	    {
 		/* Line up with the start of the matching paren line. */
 	    }
-	    else if (ind_unclosed == 0 || (!ind_unclosed_noignore
+	    else if ((ind_unclosed == 0 && is_if_for_while == 0)
+		     || (!ind_unclosed_noignore
 				    && *look == '(' && ignore_paren_col == 0))
 	    {
 		if (cur_amount != MAXCOL)
@@ -6944,7 +7031,12 @@ get_c_indent()
 		    if (find_match_paren(ind_maxparen, ind_maxcomment) != NULL)
 			amount += ind_unclosed2;
 		    else
-			amount += ind_unclosed;
+		    {
+			if (is_if_for_while)
+			    amount += ind_if_for_while;
+			else
+			    amount += ind_unclosed;
+		    }
 		}
 		/*
 		 * For a line starting with ')' use the minimum of the two
@@ -9375,6 +9467,7 @@ unix_expandpath(gap, path, wildoff, flags, didstar)
 
     /*
      * Find the first part in the path name that contains a wildcard.
+     * When EW_ICASE is set every letter is considered to be a wildcard.
      * Copy it into "buf", including the preceding characters.
      */
     p = buf;
@@ -9394,7 +9487,12 @@ unix_expandpath(gap, path, wildoff, flags, didstar)
 	    s = p + 1;
 	}
 	else if (path_end >= path + wildoff
-			 && vim_strchr((char_u *)"*?[{~$", *path_end) != NULL)
+			 && (vim_strchr((char_u *)"*?[{~$", *path_end) != NULL
+#ifndef CASE_INSENSITIVE_FILENAME
+			     || ((flags & EW_ICASE)
+					       && isalpha(PTR2CHAR(path_end)))
+#endif
+			     ))
 	    e = p;
 #ifdef FEAT_MBYTE
 	if (has_mbyte)

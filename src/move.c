@@ -2843,7 +2843,12 @@ halfpage(flag, Prenum)
 do_check_cursorbind()
 {
     linenr_T	line = curwin->w_cursor.lnum;
-    colnr_T	col =  curwin->w_cursor.col;
+    colnr_T	col = curwin->w_cursor.col;
+# ifdef FEAT_VIRTUALEDIT
+    colnr_T	coladd = curwin->w_cursor.coladd;
+# endif
+    colnr_T	curswant = curwin->w_curswant;
+    int		set_curswant = curwin->w_set_curswant;
     win_T	*old_curwin = curwin;
     buf_T	*old_curbuf = curbuf;
     int		restart_edit_save;
@@ -2875,6 +2880,11 @@ do_check_cursorbind()
 # endif
 		curwin->w_cursor.lnum = line;
 	    curwin->w_cursor.col = col;
+# ifdef FEAT_VIRTUALEDIT
+	    curwin->w_cursor.coladd = coladd;
+# endif
+	    curwin->w_curswant = curswant;
+	    curwin->w_set_curswant = set_curswant;
 
 	    /* Make sure the cursor is in a valid position.  Temporarily set
 	     * "restart_edit" to allow the cursor to be beyond the EOL. */

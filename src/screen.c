@@ -3501,9 +3501,11 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    char_attr = hl_attr(HLF_N);
 #ifdef FEAT_SYN_HL
 		    /* When 'cursorline' is set highlight the line number of
-		     * the current line differently. */
+		     * the current line differently.
+		     * TODO: Can we use CursorLine instead of CursorLineNr
+		     * when CursorLineNr isn't set? */
 		    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
-			char_attr = hl_combine_attr(hl_attr(HLF_CUL), char_attr);
+			char_attr = hl_attr(HLF_CLN);
 #endif
 		}
 	    }
@@ -5375,6 +5377,12 @@ screen_line(row, coloff, endcol, clear_width
 #else
 # define CHAR_CELLS 1
 #endif
+
+    /* Check for illegal row and col, just in case. */
+    if (row >= Rows)
+	row = Rows - 1;
+    if (endcol > Columns)
+	endcol = Columns;
 
 # ifdef FEAT_CLIPBOARD
     clip_may_clear_selection(row, row);
