@@ -177,7 +177,7 @@ gui_macvim_after_fork_init()
                                             kCFPreferencesCurrentApplication,
                                             &keyValid);
     if (keyValid) {
-        ASLogInfo(@"Use renderer=%d", val);
+        ASLogInfo(@"Use renderer=%ld", val);
         use_gui_macvim_draw_string = (val != MMRendererCoreText);
 
         // For now only the Core Text renderer knows how to render graphical
@@ -593,7 +593,7 @@ gui_mch_new_colors(void)
     gui.def_back_pixel = gui.back_pixel;
     gui.def_norm_pixel = gui.norm_pixel;
 
-    ASLogDebug(@"back=%x norm=%x", gui.def_back_pixel, gui.def_norm_pixel);
+    ASLogDebug(@"back=%ld norm=%ld", gui.def_back_pixel, gui.def_norm_pixel);
 
     [[MMBackend sharedInstance]
         setDefaultColorsBackground:gui.def_back_pixel
@@ -748,7 +748,8 @@ gui_mch_add_menu_item(vimmenu_T *menu, int idx)
             ? menu->strings[MENU_INDEX_TIP] : menu->actext;
     NSArray *desc = descriptor_for_menu(menu);
     NSString *keyEquivalent = menu->mac_key
-        ? [NSString stringWithFormat:@"%C", specialKeyToNSKey(menu->mac_key)]
+        ? [NSString stringWithFormat:@"%C",
+                            (unsigned short)specialKeyToNSKey(menu->mac_key)]
         : [NSString string];
     int modifierMask = vimModMaskToEventModifierFlags(menu->mac_mods);
     char_u *icon = NULL;
@@ -917,7 +918,7 @@ gui_mch_free_font(font)
     GuiFont	font;
 {
     if (font != NOFONT) {
-        ASLogDebug(@"font=0x%x", font);
+        ASLogDebug(@"font=%p", font);
         [(id)font release];
     }
 }
@@ -1430,6 +1431,34 @@ gui_mch_browse(
 
     return s;
 }
+
+/*
+ * Put up a directory selector
+ * Returns the selected name in allocated memory, or NULL for Cancel.
+ * title			title for the window (UNUSED)
+ * initdir			initial directory, NULL for current dir
+ */
+    char_u *
+gui_mch_browsedir(
+	       char_u *title,
+	       char_u *initdir)
+{
+    ASLogDebug(@"title='%s' initdir='%s'", title, initdir);
+
+    // Ensure no data is on the output queue before presenting the dialog.
+    gui_macvim_force_flush();
+
+    NSMutableDictionary *attr = [NSMutableDictionary
+        dictionaryWithObject:[NSNumber numberWithBool:YES]
+                      forKey:@"browsedir"];
+    if (initdir)
+        [attr setObject:[NSString stringWithVimString:initdir] forKey:@"dir"];
+
+    char_u *s = (char_u*)[[MMBackend sharedInstance]
+                            browseForFileWithAttributes:attr];
+
+    return s;
+}
 #endif /* FEAT_BROWSE */
 
 
@@ -1559,7 +1588,7 @@ gui_mch_get_rgb(guicolor_T pixel)
     void
 gui_mch_get_screen_dimensions(int *screen_w, int *screen_h)
 {
-    ASLogDebug(@"Columns=%d Rows=%d", Columns, Rows);
+    ASLogDebug(@"Columns=%ld Rows=%ld", Columns, Rows);
     *screen_w = Columns;
     *screen_h = Rows;
 }
