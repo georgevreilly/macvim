@@ -177,10 +177,12 @@ static HBRUSH	s_brush = NULL;
 
 #ifdef FEAT_TOOLBAR
 static HWND		s_toolbarhwnd = NULL;
+static WNDPROC		s_toolbar_wndproc = NULL;
 #endif
 
 #ifdef FEAT_GUI_TABLINE
 static HWND		s_tabhwnd = NULL;
+static WNDPROC		s_tabline_wndproc = NULL;
 static int		showing_tabline = 0;
 #endif
 
@@ -2529,13 +2531,13 @@ gui_mch_update_tabline(void)
     while (nr < TabCtrl_GetItemCount(s_tabhwnd))
 	TabCtrl_DeleteItem(s_tabhwnd, nr);
 
-    if (TabCtrl_GetCurSel(s_tabhwnd) != curtabidx)
-	TabCtrl_SetCurSel(s_tabhwnd, curtabidx);
-
     /* Re-enable redraw and redraw. */
     SendMessage(s_tabhwnd, WM_SETREDRAW, (WPARAM)TRUE, 0);
     RedrawWindow(s_tabhwnd, NULL, NULL,
 		    RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+
+    if (TabCtrl_GetCurSel(s_tabhwnd) != curtabidx)
+	TabCtrl_SetCurSel(s_tabhwnd, curtabidx);
 }
 
 /*
@@ -2548,8 +2550,8 @@ gui_mch_set_curtab(nr)
     if (s_tabhwnd == NULL)
 	return;
 
-    if (TabCtrl_GetCurSel(s_tabhwnd) != nr -1)
-	TabCtrl_SetCurSel(s_tabhwnd, nr -1);
+    if (TabCtrl_GetCurSel(s_tabhwnd) != nr - 1)
+	TabCtrl_SetCurSel(s_tabhwnd, nr - 1);
 }
 
 #endif
@@ -2907,9 +2909,11 @@ gui_mswin_get_valid_dimensions(
     int	    base_width, base_height;
 
     base_width = gui_get_base_width()
-	+ GetSystemMetrics(SM_CXFRAME) * 2;
+	+ (GetSystemMetrics(SM_CXFRAME) +
+           GetSystemMetrics(SM_CXPADDEDBORDER)) * 2;
     base_height = gui_get_base_height()
-	+ GetSystemMetrics(SM_CYFRAME) * 2
+	+ (GetSystemMetrics(SM_CYFRAME) +
+           GetSystemMetrics(SM_CXPADDEDBORDER)) * 2
 	+ GetSystemMetrics(SM_CYCAPTION)
 #ifdef FEAT_MENU
 	+ gui_mswin_get_menu_height(FALSE)
@@ -3102,7 +3106,7 @@ logfont2name(LOGFONT lf)
  * 'guifont'
  */
     static void
-update_im_font()
+update_im_font(void)
 {
     LOGFONT	lf_wide;
 
@@ -3123,8 +3127,42 @@ update_im_font()
     void
 gui_mch_wide_font_changed()
 {
+# ifndef MSWIN16_FASTTEXT
+    LOGFONT lf;
+# endif
+
 # ifdef FEAT_MBYTE_IME
     update_im_font();
+# endif
+
+# ifndef MSWIN16_FASTTEXT
+    gui_mch_free_font(gui.wide_ital_font);
+    gui.wide_ital_font = NOFONT;
+    gui_mch_free_font(gui.wide_bold_font);
+    gui.wide_bold_font = NOFONT;
+    gui_mch_free_font(gui.wide_boldital_font);
+    gui.wide_boldital_font = NOFONT;
+
+    if (gui.wide_font
+	&& GetObject((HFONT)gui.wide_font, sizeof(lf), &lf))
+    {
+	if (!lf.lfItalic)
+	{
+	    lf.lfItalic = TRUE;
+	    gui.wide_ital_font = get_font_handle(&lf);
+	    lf.lfItalic = FALSE;
+	}
+	if (lf.lfWeight < FW_BOLD)
+	{
+	    lf.lfWeight = FW_BOLD;
+	    gui.wide_bold_font = get_font_handle(&lf);
+	    if (!lf.lfItalic)
+	    {
+		lf.lfItalic = TRUE;
+		gui.wide_boldital_font = get_font_handle(&lf);
+	    }
+	}
+    }
 # endif
 }
 #endif
@@ -3238,9 +3276,11 @@ gui_mch_newfont()
 
     GetWindowRect(s_hwnd, &rect);
     gui_resize_shell(rect.right - rect.left
-			- GetSystemMetrics(SM_CXFRAME) * 2,
+			- (GetSystemMetrics(SM_CXFRAME) +
+                           GetSystemMetrics(SM_CXPADDEDBORDER)) * 2,
 		     rect.bottom - rect.top
-			- GetSystemMetrics(SM_CYFRAME) * 2
+			- (GetSystemMetrics(SM_CYFRAME) +
+                           GetSystemMetrics(SM_CXPADDEDBORDER)) * 2
 			- GetSystemMetrics(SM_CYCAPTION)
 #ifdef FEAT_MENU
 			- gui_mswin_get_menu_height(FALSE)

@@ -87,6 +87,10 @@ SRC_ALL =	\
 		src/testdir/python2/*.py \
 		src/testdir/python3/*.py \
 		src/testdir/pythonx/*.py \
+		src/testdir/pythonx/topmodule/__init__.py \
+		src/testdir/pythonx/topmodule/submodule/__init__.py \
+		src/testdir/pythonx/topmodule/submodule/subsubmodule/__init__.py \
+		src/testdir/pythonx/topmodule/submodule/subsubmodule/subsubsubmodule.py \
 		src/testdir/python_after/*.py \
 		src/testdir/python_before/*.py \
 		src/proto.h \
@@ -690,6 +694,7 @@ LANG_GEN = \
 		runtime/doc/*-fr.UTF-8.1 \
 		runtime/doc/*-it.1 \
 		runtime/doc/*-it.UTF-8.1 \
+		runtime/doc/*-ja.UTF-8.1 \
 		runtime/doc/*-pl.1 \
 		runtime/doc/*-pl.UTF-8.1 \
 		runtime/doc/*-ru.1 \

@@ -228,6 +228,7 @@ STARTTEST
 :call add(tl, [2, '\v((ab)|c*)+', 'abcccaba', 'abcccab', '', 'ab'])
 :call add(tl, [2, '\v(a(c*)+b)+', 'acbababaaa', 'acbabab', 'ab', ''])
 :call add(tl, [2, '\v(a|b*)+', 'aaaa', 'aaaa', ''])
+:call add(tl, [2, '\p*', 'aá 	', 'aá '])
 :"
 :" Test greedy-ness and lazy-ness
 :call add(tl, [2, 'a\{-2,7}','aaaaaaaaaaaaa', 'aa'])
@@ -338,6 +339,9 @@ STARTTEST
 :call add(tl, [2, '^\%(.*bar\)\@!.*\zsfoo', ' bar foo '])
 :call add(tl, [2, '^\%(.*bar\)\@!.*\zsfoo', ' foo bar '])
 :call add(tl, [2, '^\%(.*bar\)\@!.*\zsfoo', ' foo xxx ', 'foo'])
+:call add(tl, [2, '[ ]\@!\p\%([ ]\@!\p\)*:', 'implicit mappings:', 'mappings:'])
+:call add(tl, [2, 'm\k\+_\@=\%(_\@!\k\)\@<=\k\+e', 'mx__xe', 'mx__xe'])
+:call add(tl, [2, '\%(\U\@<=S\k*\|S\l\)R', 'SuR', 'SuR'])
 :"
 :"""" Combining different tests and features
 :call add(tl, [2, '[[:alpha:]]\{-2,6}', '787abcdiuhsasiuhb4', 'ab'])
@@ -366,6 +370,8 @@ STARTTEST
 :call add(tl, [2, '\%[bar]x', 'barxx', 'barx'])
 :call add(tl, [2, '\%[bar]x', 'bxx', 'bx'])
 :call add(tl, [2, '\%[bar]x', 'xxx', 'x'])
+:call add(tl, [2, 'b\%[[ao]r]', 'bar bor', 'bar'])
+:call add(tl, [2, 'b\%[[]]r]', 'b]r bor', 'b]r'])
 :"
 :"""" Alternatives, must use first longest match
 :call add(tl, [2, 'goo\|go', 'google', 'goo'])
@@ -378,6 +384,10 @@ STARTTEST
 :call add(tl, [2, '\(a\)\(b\)\(c\)\(dd\)\(e\)\(f\)\(g\)\(h\)\(i\)\1\2\3\4\5\6\7\8\9', 'xabcddefghiabcddefghix', 'abcddefghiabcddefghi', 'a', 'b', 'c', 'dd', 'e', 'f', 'g', 'h', 'i'])
 :call add(tl, [2, '\(\d*\)a \1b', ' a b ', 'a b', ''])
 :call add(tl, [2, '^.\(.\).\_..\1.', "aaa\naaa\nb", "aaa\naaa", 'a'])
+:call add(tl, [2, '^.*\.\(.*\)/.\+\(\1\)\@<!$', 'foo.bat/foo.com', 'foo.bat/foo.com', 'bat'])
+:call add(tl, [2, '^.*\.\(.*\)/.\+\(\1\)\@<!$', 'foo.bat/foo.bat'])
+:call add(tl, [2, '^.*\.\(.*\)/.\+\(\1\)\@<=$', 'foo.bat/foo.bat', 'foo.bat/foo.bat', 'bat', 'bat'])
+:call add(tl, [2, '\\\@<!\${\(\d\+\%(:.\{-}\)\?\\\@<!\)}', '2013-06-27${0}', '${0}', '0'])
 :"
 :"""" Look-behind with limit
 :call add(tl, [2, '<\@<=span.', 'xxspanxx<spanyyy', 'spany'])
@@ -456,7 +466,7 @@ STARTTEST
 :endfor
 :unlet t tl e l
 :"
-:"""""" multi-line tests
+:"""""" multi-line tests """"""""""""""""""""
 :let tl = []
 :"
 :"""" back references
@@ -566,6 +576,7 @@ yeGopA END:"
 "ayb20gg/..\%$
 "bybGo"apo"bp:"
 :"
+:""""" Write the results """""""""""""
 :/\%#=1^Results/,$wq! test.out
 ENDTEST
 
