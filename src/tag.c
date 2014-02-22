@@ -1797,13 +1797,16 @@ line_read_in:
 	     */
 	    if (state == TS_START)
 	    {
-		/* The header ends when the line sorts below "!_TAG_".
-		 * There may be non-header items before the header though,
-		 * e.g. "!" itself. When case is folded lower case letters
-		 * sort before "_". */
+		/* The header ends when the line sorts below "!_TAG_".  When
+		 * case is folded lower case letters sort before "_". */
 		if (STRNCMP(lbuf, "!_TAG_", 6) <= 0
 				|| (lbuf[0] == '!' && ASCII_ISLOWER(lbuf[1])))
 		{
+		    if (STRNCMP(lbuf, "!_TAG_", 6) != 0)
+			/* Non-header item before the header, e.g. "!" itself.
+			 */
+			goto parse_line;
+
 		    /*
 		     * Read header line.
 		     */
@@ -1898,6 +1901,7 @@ line_read_in:
 #endif
 	    }
 
+parse_line:
 	    /*
 	     * Figure out where the different strings are in this line.
 	     * For "normal" tags: Do a quick check if the tag matches.
@@ -3326,7 +3330,9 @@ jumpto_tag(lbuf, forceit, keep_help)
 #ifdef FEAT_SEARCH_EXTRA
 	/* restore no_hlsearch when keeping the old search pattern */
 	if (search_options)
-	    no_hlsearch = save_no_hlsearch;
+	{
+	    SET_NO_HLSEARCH(save_no_hlsearch);
+	}
 #endif
 
 	/* Return OK if jumped to another file (at least we found the file!). */
